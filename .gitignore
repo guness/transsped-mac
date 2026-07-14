@@ -5,3 +5,4 @@ _sig.bin
 _pub.pem
 leaf_cert.pem
 chain.pem
+.superpowers/
