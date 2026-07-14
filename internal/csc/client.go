@@ -2,10 +2,12 @@ package csc
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -90,10 +92,36 @@ func (c *Client) SignHash(credentialID, sad, hashB64, signAlgo, hashAlgo string)
 	if err := c.post("signatures/signHash", req, &r); err != nil {
 		return "", err
 	}
-	if len(r.Signatures) == 0 {
+	if len(r.Signatures) == 0 || r.Signatures[0] == "" {
 		return "", fmt.Errorf("signHash returned no signature")
 	}
 	return r.Signatures[0], nil
+}
+
+// toInt coerces a JSON value that may arrive as a number (float64) or a numeric
+// string into an int; returns 0 for anything else (missing/unparseable).
+func toInt(v any) int {
+	switch t := v.(type) {
+	case float64:
+		return int(t)
+	case string:
+		n, err := strconv.Atoi(strings.TrimSpace(t))
+		if err != nil {
+			return 0
+		}
+		return n
+	}
+	return 0
+}
+
+// plausibleCert is a cheap-then-strict filter: the length check pre-filters, then
+// the candidate must base64-decode to at least 100 bytes to count as a DER cert.
+func plausibleCert(s string) bool {
+	if len(s) <= 200 {
+		return false
+	}
+	d, err := base64.StdEncoding.DecodeString(s)
+	return err == nil && len(d) >= 100
 }
 
 func (c *Client) Info(credentialID string) (*Info, error) {
@@ -103,16 +131,18 @@ func (c *Client) Info(credentialID string) (*Info, error) {
 		return nil, err
 	}
 	info := &Info{}
-	// certificates: look for []string of base64 DER under cert/certificates
+	// certificates: look for []string of base64 DER under cert/certificates.
+	// Every candidate must survive plausibleCert so a random long field can't
+	// be mistaken for a certificate.
 	collect := func(v any) {
 		switch t := v.(type) {
 		case string:
-			if len(t) > 200 {
+			if plausibleCert(t) {
 				info.CertB64 = append(info.CertB64, t)
 			}
 		case []any:
 			for _, e := range t {
-				if s, ok := e.(string); ok && len(s) > 200 {
+				if s, ok := e.(string); ok && plausibleCert(s) {
 					info.CertB64 = append(info.CertB64, s)
 				}
 			}
@@ -120,7 +150,7 @@ func (c *Client) Info(credentialID string) (*Info, error) {
 			if cc, ok := t["certificates"]; ok {
 				if arr, ok := cc.([]any); ok {
 					for _, e := range arr {
-						if s, ok := e.(string); ok {
+						if s, ok := e.(string); ok && plausibleCert(s) {
 							info.CertB64 = append(info.CertB64, s)
 						}
 					}
@@ -133,10 +163,17 @@ func (c *Client) Info(credentialID string) (*Info, error) {
 	if s, ok := raw["SCAL"].(string); ok {
 		info.SCAL = s
 	}
+	if s, ok := raw["authMode"].(string); ok {
+		info.AuthMode = s
+	} else if s, ok := raw["authmode"].(string); ok {
+		info.AuthMode = s
+	}
+	info.Multisign = toInt(raw["multisign"])
 	if k, ok := raw["key"].(map[string]any); ok {
 		if a, ok := k["algo"].(string); ok {
 			info.KeyAlgo = a
 		}
+		info.KeyLen = toInt(k["len"])
 	}
 	return info, nil
 }
