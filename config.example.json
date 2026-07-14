@@ -1,0 +1,6 @@
+{
+  "baseURL": "https://cloud.transsped.ro/csc/v1/",
+  "userID": "user@example.com",
+  "credentialID": "00000000-0000-0000-0000-000000000000",
+  "label": "My Signing Certificate"
+}
