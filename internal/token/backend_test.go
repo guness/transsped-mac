@@ -44,6 +44,26 @@ func TestFindObjects_NegativeMaxNoPanic(t *testing.T) {
 	}
 }
 
+// TestNewBackend_EmptyNoPanic guards the cmd/pkcs11 entrypoint's
+// config-load-failure fallback: NewBackend(nil, &csc.Signer{}) must produce
+// a usable, empty backend that a Cryptoki host can drive (FindObjectsInit /
+// FindObjects) without panicking, so a missing tscloud config never crashes
+// the browser hosting the module.
+func TestNewBackend_EmptyNoPanic(t *testing.T) {
+	b := NewBackend(nil, &csc.Signer{})
+
+	if err := b.FindObjectsInit(1, nil); err != nil {
+		t.Fatalf("FindObjectsInit: %v", err)
+	}
+	hs, _, err := b.FindObjects(1, 100)
+	if err != nil {
+		t.Fatalf("FindObjects: %v", err)
+	}
+	if len(hs) != 0 {
+		t.Fatalf("want 0 handles on empty backend, got %d", len(hs))
+	}
+}
+
 type fixedOTP struct{}
 
 func (fixedOTP) OTP(string) (string, error) { return "111111", nil }

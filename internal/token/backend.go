@@ -34,7 +34,17 @@ func (b *Backend) Initialize() error { return nil }
 func (b *Backend) Finalize() error   { return nil }
 
 func (b *Backend) GetInfo() (pkcs11.Info, error) {
-	return pkcs11.Info{ManufacturerID: "Trans Sped", LibraryDescription: "TS Cloud PKCS#11"}, nil
+	// CryptokiVersion/LibraryVersion must be non-zero: NSS (modutil/Firefox)
+	// validates CK_INFO.cryptokiVersion when adding a module and silently
+	// rejects one reporting 0.0 as unsupported/invalid, even though the
+	// module otherwise loads and responds correctly. Discovered via the
+	// Firefox/NSS load validation in scripts/firefox-setup.md.
+	return pkcs11.Info{
+		CryptokiVersion:    pkcs11.Version{Major: 2, Minor: 20},
+		ManufacturerID:     "Trans Sped",
+		LibraryDescription: "TS Cloud PKCS#11",
+		LibraryVersion:     pkcs11.Version{Major: 1, Minor: 0},
+	}, nil
 }
 func (b *Backend) GetSlotList(bool) ([]uint, error) { return []uint{slotID}, nil }
 func (b *Backend) GetSlotInfo(uint) (pkcs11.SlotInfo, error) {
@@ -105,6 +115,12 @@ func (b *Backend) SignInit(_ pkcs11.SessionHandle, _ []*pkcs11.Mechanism, key pk
 	return nil
 }
 func (b *Backend) Sign(_ pkcs11.SessionHandle, data []byte) ([]byte, error) {
+	// Guard the empty-backend case (config load failed at startup, so
+	// NewBackend was wired with a bare &csc.Signer{} with no Client): a
+	// stray Sign call must fail cleanly, not nil-panic and crash the host.
+	if b.signer == nil || b.signer.Client == nil {
+		return nil, ckErr(pkcs11.CKR_FUNCTION_FAILED)
+	}
 	sig, err := b.signer.SignDigestInfo(data)
 	if err != nil {
 		return nil, ckErr(pkcs11.CKR_FUNCTION_FAILED)

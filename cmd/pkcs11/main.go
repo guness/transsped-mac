@@ -19,7 +19,17 @@ import (
 func init() {
 	cfg, leaf, inter, err := config.Load()
 	if err != nil {
+		// pkcs11mod.SetBackend MUST be called unconditionally: NSS/Firefox
+		// dlopen()s this module and immediately drives it through the
+		// Cryptoki API (C_GetSlotList, C_GetTokenInfo, ...). If no backend
+		// is ever registered, those calls hit a nil backend inside
+		// pkcs11mod and the host process (Firefox) crashes. On a config
+		// load failure (e.g. `tscloud-setup` hasn't been run yet) we
+		// register an empty backend instead: no objects, a bare signer.
+		// The token still appears in NSS with no cert/key, which is safe
+		// and lets the browser continue to run normally.
 		log.Printf("tscloud pkcs11: config load failed: %v", err)
+		pkcs11mod.SetBackend(token.NewBackend(nil, &csc.Signer{}))
 		return
 	}
 	// Headless OTP override for automated/CI testing: when TSCLOUD_OTP is set,
