@@ -38,12 +38,15 @@ func b(v uint) []byte {
 // BuildObjects constructs the in-memory PKCS#11 objects for a leaf
 // certificate and its RSA private key (linked by CKA_ID), plus one
 // certificate object per intermediate. Returns [cert, privkey, intermediate...].
+//
+// BuildObjects runs from this module's dlopen-time init(), so it must never
+// panic: a leaf whose public key is not RSA (e.g. ECDSA) would otherwise
+// crash the host process (Firefox). If the leaf's public key is not
+// *rsa.PublicKey, BuildObjects skips the private-key object entirely and
+// returns only certificate objects (leaf + intermediates) — the module
+// still loads and the certificate is visible, there is just no usable key.
 func BuildObjects(leaf *x509.Certificate, inter []*x509.Certificate) []*Object {
 	id := keyID(leaf)
-	pub := leaf.PublicKey.(*rsa.PublicKey)
-	exp := make([]byte, 8)
-	binary.BigEndian.PutUint64(exp, uint64(pub.E))
-	exp = bytes.TrimLeft(exp, "\x00")
 
 	// RawSerialNumber() does not exist on this Go version's x509.Certificate;
 	// DER-encode the serial number ourselves.
@@ -60,20 +63,32 @@ func BuildObjects(leaf *x509.Certificate, inter []*x509.Certificate) []*Object {
 		pkcs11.CKA_ISSUER:           leaf.RawIssuer,
 		pkcs11.CKA_SERIAL_NUMBER:    serial,
 	}}
-	priv := &Object{Handle: 2, Attrs: map[uint][]byte{
-		pkcs11.CKA_CLASS:           b(pkcs11.CKO_PRIVATE_KEY),
-		pkcs11.CKA_KEY_TYPE:        b(pkcs11.CKK_RSA),
-		pkcs11.CKA_TOKEN:           {1},
-		pkcs11.CKA_PRIVATE:         {1},
-		pkcs11.CKA_SIGN:            {1},
-		pkcs11.CKA_ID:              id,
-		pkcs11.CKA_LABEL:           []byte("Trans Sped Cloud"),
-		pkcs11.CKA_MODULUS:         pub.N.Bytes(),
-		pkcs11.CKA_PUBLIC_EXPONENT: exp,
-	}}
-	objs := []*Object{cert, priv}
-	for i, c := range inter {
-		objs = append(objs, &Object{Handle: pkcs11.ObjectHandle(3 + i), Attrs: map[uint][]byte{
+
+	objs := []*Object{cert}
+	nextHandle := pkcs11.ObjectHandle(2)
+
+	if pub, ok := leaf.PublicKey.(*rsa.PublicKey); ok {
+		exp := make([]byte, 8)
+		binary.BigEndian.PutUint64(exp, uint64(pub.E))
+		exp = bytes.TrimLeft(exp, "\x00")
+
+		priv := &Object{Handle: nextHandle, Attrs: map[uint][]byte{
+			pkcs11.CKA_CLASS:           b(pkcs11.CKO_PRIVATE_KEY),
+			pkcs11.CKA_KEY_TYPE:        b(pkcs11.CKK_RSA),
+			pkcs11.CKA_TOKEN:           {1},
+			pkcs11.CKA_PRIVATE:         {1},
+			pkcs11.CKA_SIGN:            {1},
+			pkcs11.CKA_ID:              id,
+			pkcs11.CKA_LABEL:           []byte("Trans Sped Cloud"),
+			pkcs11.CKA_MODULUS:         pub.N.Bytes(),
+			pkcs11.CKA_PUBLIC_EXPONENT: exp,
+		}}
+		objs = append(objs, priv)
+		nextHandle++
+	}
+
+	for _, c := range inter {
+		objs = append(objs, &Object{Handle: nextHandle, Attrs: map[uint][]byte{
 			pkcs11.CKA_CLASS:            b(pkcs11.CKO_CERTIFICATE),
 			pkcs11.CKA_CERTIFICATE_TYPE: b(pkcs11.CKC_X_509),
 			pkcs11.CKA_TOKEN:            {1},
@@ -81,6 +96,7 @@ func BuildObjects(leaf *x509.Certificate, inter []*x509.Certificate) []*Object {
 			pkcs11.CKA_SUBJECT:          c.RawSubject,
 			pkcs11.CKA_ISSUER:           c.RawIssuer,
 		}})
+		nextHandle++
 	}
 	return objs
 }

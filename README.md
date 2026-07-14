@@ -36,7 +36,7 @@ requires PSS, so 1.3 client auth is impossible with this cloud.
 
 ## Prerequisites
 
-- **Go 1.21+** (developed against 1.26; `go.mod` requires `go 1.26.3` toolchain)
+- **Go 1.22+** (developed against 1.26; `go.mod` requires `go 1.22`)
 - **Xcode Command Line Tools** (`xcode-select --install`) — provides `clang`/`cc`, needed for the cgo build
 - `brew install nss opensc` — `nss` provides `modutil`/`certutil` (Firefox profile setup), `opensc` provides `pkcs11-tool` (testing/diagnostics)
 - **Firefox** — required; Chrome and Safari use the macOS Keychain for client certs and have no PKCS#11 loader, so they cannot use this module
