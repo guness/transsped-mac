@@ -10,3 +10,8 @@ chain.pem
 # Stray top-level binary from `go build ./cmd/pkcs11/` (no -o given)
 /pkcs11
 /cmd/pkcs11/pkcs11
+
+# Build artifacts from scripts/build.sh — do not commit
+/libtscloud-pkcs11.dylib
+/libtscloud-pkcs11.h
+/tscloud-setup
