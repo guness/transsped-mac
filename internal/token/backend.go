@@ -69,7 +69,7 @@ func (b *Backend) FindObjectsInit(_ pkcs11.SessionHandle, tmpl []*pkcs11.Attribu
 }
 func (b *Backend) FindObjects(_ pkcs11.SessionHandle, max int) ([]pkcs11.ObjectHandle, bool, error) {
 	n := len(b.find)
-	if n > max {
+	if max >= 0 && n > max {
 		n = max
 	}
 	out := b.find[:n]
@@ -83,6 +83,7 @@ func (b *Backend) GetAttributeValue(_ pkcs11.SessionHandle, h pkcs11.ObjectHandl
 	for _, o := range b.objs {
 		if o.Handle == h {
 			obj = o
+			break
 		}
 	}
 	if obj == nil {
