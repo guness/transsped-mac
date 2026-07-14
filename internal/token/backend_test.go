@@ -1,9 +1,17 @@
 package token
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"tscloud/internal/csc"
+
+	"github.com/miekg/pkcs11"
 )
 
 // TestFindObjects_NegativeMaxNoPanic guards against a regression where a
@@ -33,5 +41,49 @@ func TestFindObjects_NegativeMaxNoPanic(t *testing.T) {
 	}
 	if len(hs) != 1 {
 		t.Fatalf("want 1 handle (respecting positive max), got %d", len(hs))
+	}
+}
+
+type fixedOTP struct{}
+
+func (fixedOTP) OTP(string) (string, error) { return "111111", nil }
+
+// TestBackend_FindAndSign drives the Backend through the full
+// find-private-key -> sign flow, with the CSC HTTP calls (sendOTP, authorize,
+// signHash) served by an httptest server and OTP prompting satisfied by
+// fixedOTP. It asserts the decoded signature bytes returned by Sign match
+// what the mock server returned.
+func TestBackend_FindAndSign(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "sendOTP"):
+			io.WriteString(w, `{}`)
+		case strings.HasSuffix(r.URL.Path, "authorize"):
+			io.WriteString(w, `{"SAD":"S"}`)
+		case strings.HasSuffix(r.URL.Path, "signHash"):
+			io.WriteString(w, `{"signatures":["`+base64.StdEncoding.EncodeToString([]byte("OK"))+`"]}`)
+		}
+	}))
+	defer srv.Close()
+
+	leaf := sampleLeaf(t)
+	signer := &csc.Signer{Client: csc.New(srv.URL + "/"), CredentialID: "c", OTP: fixedOTP{}}
+	b := NewBackend(BuildObjects(leaf, nil), signer)
+	b.Login(1, pkcs11.CKU_USER, "1234")
+
+	// find private key
+	if err := b.FindObjectsInit(1, []*pkcs11.Attribute{pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY)}); err != nil {
+		t.Fatal(err)
+	}
+	hs, _, _ := b.FindObjects(1, 10)
+	if len(hs) != 1 {
+		t.Fatalf("want 1 privkey, got %d", len(hs))
+	}
+	// sign
+	b.SignInit(1, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_RSA_PKCS, nil)}, hs[0])
+	sum := sha256.Sum256([]byte("x"))
+	sig, err := b.Sign(1, sum[:])
+	if err != nil || string(sig) != "OK" {
+		t.Fatalf("sign: %q %v", sig, err)
 	}
 }
