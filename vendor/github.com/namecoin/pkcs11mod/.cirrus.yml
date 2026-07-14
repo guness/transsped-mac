@@ -1,0 +1,608 @@
+# Attention: if you submit an improvement for a Namecoin Cirrus config, please
+# file a GitHub issue about it at the namecoin/meta repo, so that we can make
+# sure it propagates to all the other Namecoin repos.  Thanks!
+
+task:
+  name: ShellCheck
+  container:
+    image: fedora:latest
+    cpu: 1
+    memory: 1G
+  install_script: dnf install -y ShellCheck
+  lint_script: bash testdata/shellcheck.bash
+
+task:
+  name: "Compile Go $GO_VERSION $GOOS $GOARCH$MODULES_NAME"
+  alias: Compile
+  container:
+    image: golang:$GO_VERSION
+    cpu: 1
+    memory: 1G
+  path_script:
+    - source testdata/move_to_gopath.bash
+  matrix:
+    - env:
+        GOOS: "linux"
+        GOARCH: "amd64"
+    - env:
+        GOOS: "linux"
+        GOARCH: "386"
+        CFLAGS: "-m32"
+      install_script:
+        - dpkg --add-architecture i386
+        - apt-get update
+        - apt-get install -y gcc-multilib libc6-dev:i386
+    - env:
+        GOOS: "linux"
+        GOARCH: "arm"
+        CC: "arm-linux-gnueabihf-gcc"
+      install_script:
+        - dpkg --add-architecture armhf
+        - apt-get update
+        - apt-get install -y gcc-arm-linux-gnueabihf libc6-dev:armhf
+    - env:
+        GOOS: "linux"
+        GOARCH: "arm64"
+        CC: "aarch64-linux-gnu-gcc"
+      install_script:
+        - dpkg --add-architecture arm64
+        - apt-get update
+        - apt-get install -y gcc-aarch64-linux-gnu libc6-dev:arm64
+    - env:
+        GOOS: "linux"
+        GOARCH: "ppc64le"
+        CC: "powerpc64le-linux-gnu-gcc"
+      install_script:
+        - dpkg --add-architecture ppc64el
+        - apt-get update
+        - apt-get install -y gcc-powerpc64le-linux-gnu libc6-dev:ppc64el
+    - env:
+        GOOS: "windows"
+        GOARCH: "amd64"
+        CC: "x86_64-w64-mingw32-gcc-win32"
+      install_script:
+        - apt-get update
+        - apt-get install -y gcc-mingw-w64-x86-64
+    - env:
+        GOOS: "windows"
+        GOARCH: "386"
+        CC: "i686-w64-mingw32-gcc-win32"
+      install_script:
+        - apt-get update
+        - apt-get install -y gcc-mingw-w64-i686
+  matrix:
+    - env:
+        GO111MODULE: "off"
+        MODULES_NAME: " Modules Off"
+      fetch_script:
+        - cd $(go env GOPATH)/src/github.com/"$CIRRUS_REPO_FULL_NAME"
+        - go get -tags "$GOX_TAGS" -d -v -t github.com/$CIRRUS_REPO_FULL_NAME/...
+        - go generate github.com/$CIRRUS_REPO_FULL_NAME/...
+        - go get -tags "$GOX_TAGS" -d -v -t github.com/$CIRRUS_REPO_FULL_NAME/...
+    - env:
+        MODULES_NAME: ""
+      fetch_script:
+        - cd $(go env GOPATH)/src/github.com/"$CIRRUS_REPO_FULL_NAME"
+        - go mod init github.com/"$CIRRUS_REPO_FULL_NAME"
+        - go mod tidy
+        - go generate ./...
+        - go mod tidy
+  build_script:
+    - SO_PREFIX=lib
+    - SO_EXT=so
+    - if [[ "$GOOS" == "windows" ]]
+    - then
+    - SO_PREFIX=""
+    - SO_EXT=dll
+    - fi
+    - cd $(go env GOPATH)/src/github.com/"$CIRRUS_REPO_FULL_NAME"
+    - mkdir -p dist
+    - cd pkcs11proxy
+    - CGO_ENABLED=1 go build -buildmode c-shared -o ../dist/${SO_PREFIX}pkcs11proxy.$SO_EXT
+    - cd ../p11proxy
+    - CGO_ENABLED=1 go build -buildmode c-shared -o ../dist/${SO_PREFIX}p11proxy.$SO_EXT
+  dist_script:
+    - SO_PREFIX=lib
+    - SO_EXT=so
+    - if [[ "$GOOS" == "windows" ]]
+    - then
+    - SO_PREFIX=""
+    - SO_EXT=dll
+    - fi
+    - mv $(go env GOPATH)/src/github.com/"$CIRRUS_REPO_FULL_NAME"/dist/*.$SO_EXT ./
+    - mkdir -p ./dist
+    - tar -caf ./dist/pkcs11mod.tar.gz ./*.$SO_EXT
+  binaries_artifacts:
+    path: "dist/*"
+  env:
+    GO_VERSION: latest
+
+task:
+  name: "Compile Go $GO_VERSION $GOOS $GOARCH$MODULES_NAME"
+  alias: Compile
+  macos_instance:
+    image: big-sur-xcode-12.3
+  brew_script:
+    - brew update
+  bash_script:
+    # macOS default bash is missing globstar support.
+    - brew install bash
+  go_script:
+    - brew install go
+  path_script:
+    - source testdata/move_to_gopath.bash
+  env:
+    GOOS: "darwin"
+    GOARCH: "amd64"
+  matrix:
+    - env:
+        GO111MODULE: "off"
+        MODULES_NAME: " Modules Off"
+      fetch_script:
+        - cd $(go env GOPATH)/src/github.com/"$CIRRUS_REPO_FULL_NAME"
+        - go get -tags "$GOX_TAGS" -d -v -t github.com/$CIRRUS_REPO_FULL_NAME/...
+        - go generate github.com/$CIRRUS_REPO_FULL_NAME/...
+        - go get -tags "$GOX_TAGS" -d -v -t github.com/$CIRRUS_REPO_FULL_NAME/...
+    - env:
+        MODULES_NAME: ""
+      fetch_script:
+        - cd $(go env GOPATH)/src/github.com/"$CIRRUS_REPO_FULL_NAME"
+        - go mod init github.com/"$CIRRUS_REPO_FULL_NAME"
+        - go mod tidy
+        - go generate ./...
+        - go mod tidy
+  build_script:
+    - SO_PREFIX=lib
+    - SO_EXT=dylib
+    - cd $(go env GOPATH)/src/github.com/"$CIRRUS_REPO_FULL_NAME"
+    - mkdir -p dist
+    - cd pkcs11proxy
+    - CGO_ENABLED=1 go build -buildmode c-shared -o ../dist/${SO_PREFIX}pkcs11proxy.$SO_EXT
+    - cd ../p11proxy
+    - CGO_ENABLED=1 go build -buildmode c-shared -o ../dist/${SO_PREFIX}p11proxy.$SO_EXT
+  dist_script:
+    - SO_PREFIX=lib
+    - SO_EXT=dylib
+    - mv $(go env GOPATH)/src/github.com/"$CIRRUS_REPO_FULL_NAME"/dist/*.$SO_EXT ./
+    - mkdir -p ./dist
+    - tar -caf ./dist/pkcs11mod.tar.gz ./*.$SO_EXT
+  binaries_artifacts:
+    path: "dist/*"
+  env:
+    GO_VERSION: latest
+
+task:
+  alias: Go Lint
+  container:
+    image: golangci/golangci-lint:latest
+  fetch_script:
+    - go mod init github.com/"$CIRRUS_REPO_FULL_NAME"
+    - go mod tidy
+    - go generate ./...
+    - go mod tidy
+  # interfacebloat complains about miekg/pkcs11 API's that we can't change.
+  # nosnakecase complains about miekg/pkcs11 API's that we can't change.
+  lint_script: golangci-lint run --enable-all --disable exhaustivestruct,exhaustruct,gochecknoglobals,gochecknoinits,interfacebloat,nosnakecase $GOLANGCI_ARGS -v --out-format json > lint-report.json
+  matrix:
+    - name: Go Lint New
+      env:
+        GOLANGCI_ARGS: "--new-from-rev=HEAD~"
+    - name: Go Lint Mandatory
+      env:
+        GOLANGCI_ARGS: "--disable=cyclop,dupl,gci,godox,goerr113,gomnd,gosimple,ifshort,lll,nlreturn,nosnakecase,revive,varnamelen,wrapcheck"
+    - name: Go Lint
+      env:
+        GOLANGCI_ARGS: ""
+      allow_failures: true
+  always:
+    golangci_artifacts:
+      path: lint-report.json
+      type: text/json
+      format: golangci
+
+task:
+  name: "csbuild"
+  container:
+    image: fedora:latest
+    cpu: 1
+    memory: 1G
+  install_script:
+    - dnf install -y golang gcc csbuild
+  help_script:
+    - csbuild --help
+  path_script:
+    - source testdata/move_to_gopath.bash
+  fetch_script:
+    - cd $(go env GOPATH)/src/github.com/"$CIRRUS_REPO_FULL_NAME"
+    - go mod init github.com/"$CIRRUS_REPO_FULL_NAME"
+    - go mod tidy
+    - csbuild --build-cmd 'go generate ./...' | tee csbuild.txt
+    - if ! grep -P -q -i -z 'CURRENT DEFECTS\n===============\n$' csbuild.txt
+    - then
+    - exit 1
+    - fi
+    - go mod tidy
+  build_script:
+    - SO_PREFIX=lib
+    - SO_EXT=so
+    - cd $(go env GOPATH)/src/github.com/"$CIRRUS_REPO_FULL_NAME"
+    - mkdir -p dist
+    - cd pkcs11proxy
+    - CGO_ENABLED=1 csbuild --build-cmd "go build -buildmode c-shared -o ../dist/${SO_PREFIX}pkcs11proxy.$SO_EXT" | tee csbuild.txt
+    - if ! grep -P -q -i -z 'CURRENT DEFECTS\n===============\n$' csbuild.txt
+    - then
+    - exit 1
+    - fi
+    - cd ../p11proxy
+    - CGO_ENABLED=1 csbuild --build-cmd "go build -buildmode c-shared -o ../dist/${SO_PREFIX}p11proxy.$SO_EXT" | tee csbuild.txt
+    - if ! grep -P -q -i -z 'CURRENT DEFECTS\n===============\n$' csbuild.txt
+    - then
+    - exit 1
+    - fi
+
+task:
+  name: "certutil $CI_DISTRO"
+  matrix:
+    - container:
+        image: fedora:latest
+        cpu: 1
+        memory: 1G
+      package_install_script:
+        - dnf install -y nss-tools
+      env:
+        CI_DISTRO: fedora
+        CI_MAIN_MODULE: /usr/lib64/pkcs11/p11-kit-trust.so
+        CI_BAK_MODULE: /usr/lib64/pkcs11/p11-kit-trust.orig.so
+    - container:
+        image: debian:latest
+        cpu: 1
+        memory: 1G
+      package_install_script:
+        - apt-get update
+        - apt-get install -y curl libnss3-tools
+      env:
+        CI_DISTRO: debian
+        CI_MAIN_MODULE: /usr/lib/x86_64-linux-gnu/nss/libnssckbi.so
+        CI_BAK_MODULE: /usr/lib/x86_64-linux-gnu/nss/libnssckbi.orig.so
+  install_script:
+    - curl -o pkcs11mod.tar.gz https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Compile%20Go%20latest%20linux%20amd64/binaries/dist/pkcs11mod.tar.gz
+    - tar -xaf ./pkcs11mod.tar.gz
+  test_script:
+    - testdata/ci-certutil-tests.bash
+  depends_on:
+    - "Compile Go latest linux amd64"
+
+task:
+  name: "certutil $CI_CHANNEL windows"
+  windows_container:
+    image: cirrusci/windowsservercore:2019
+    cpu: 1
+    memory: 1G
+  install_script:
+    - SET PATH=%PATH%;%cd%
+    - powershell -ExecutionPolicy Unrestricted -File "testdata/download-certutil.ps1" -channel %CI_CHANNEL%
+    - curl -o pkcs11mod.tar.gz --location https://api.cirrus-ci.com/v1/artifact/build/%CIRRUS_BUILD_ID%/Compile%%%%20Go%%%%20latest%%%%20windows%%%%20%GOARCH%/binaries/dist/pkcs11mod.tar.gz
+    - tar -xf pkcs11mod.tar.gz
+  test_script:
+    - SET PATH=%PATH%;%cd%
+    - powershell -ExecutionPolicy Unrestricted -File "testdata/ci-certutil-tests.ps1"
+  env:
+    GOARCH: "amd64"
+    CI_MAIN_MODULE: ./nssckbi.dll
+    CI_BAK_MODULE: ./nssckbi.orig.dll
+  depends_on:
+    - "Compile Go latest windows amd64"
+  matrix:
+    - env:
+        CI_CHANNEL: "Nightly"
+    - env:
+        CI_CHANNEL: "Alpha"
+    - env:
+        CI_CHANNEL: "Stable"
+
+task:
+  name: "Chromium $CI_DISTRO"
+  matrix:
+    - container:
+        image: fedora:latest
+        cpu: 1
+        memory: 1G
+      package_install_script:
+        - dnf install -y chromium
+      env:
+        CI_DISTRO: fedora
+        CI_MAIN_MODULE: /usr/lib64/pkcs11/p11-kit-trust.so
+        CI_BAK_MODULE: /usr/lib64/pkcs11/p11-kit-trust.orig.so
+    - container:
+        image: debian:latest
+        cpu: 1
+        memory: 1G
+      package_install_script:
+        - apt-get update
+        - apt-get install -y curl chromium
+        - ln -s -T /usr/bin/chromium /usr/bin/chromium-browser
+      env:
+        CI_DISTRO: debian
+        CI_MAIN_MODULE: /usr/lib/x86_64-linux-gnu/nss/libnssckbi.so
+        CI_BAK_MODULE: /usr/lib/x86_64-linux-gnu/nss/libnssckbi.orig.so
+  install_script:
+    - curl -o pkcs11mod.tar.gz https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Compile%20Go%20latest%20linux%20amd64/binaries/dist/pkcs11mod.tar.gz
+    - tar -xaf ./pkcs11mod.tar.gz
+  test_script:
+    - testdata/ci-chromium-tests.bash
+  depends_on:
+    - "Compile Go latest linux amd64"
+
+task:
+  name: "Exports $GOARCH"
+  windows_container:
+    image: cirrusci/windowsservercore:2019
+    cpu: 1
+    memory: 1G
+  install_script:
+    - curl -o Dependencies.zip --location https://github.com/lucasg/Dependencies/releases/download/v1.11.1/Dependencies_x64_Release.zip
+    - tar -xf Dependencies.zip
+    - curl -o pkcs11mod.tar.gz --location https://api.cirrus-ci.com/v1/artifact/build/%CIRRUS_BUILD_ID%/Compile%%%%20Go%%%%20latest%%%%20windows%%%%20%GOARCH%/binaries/dist/pkcs11mod.tar.gz
+    - tar -xf pkcs11mod.tar.gz
+  test_script:
+    - SET PATH=%PATH%;%cd%
+    - powershell -ExecutionPolicy Unrestricted -File "testdata/ci-exports-tests.ps1"
+  matrix:
+    - env:
+        GOARCH: "amd64"
+      depends_on:
+        - "Compile Go latest windows amd64"
+    - env:
+        GOARCH: "386"
+      depends_on:
+        - "Compile Go latest windows 386"
+
+task:
+  name: "Firefox $CI_DISTRO"
+  matrix:
+    - container:
+        image: fedora:latest
+        cpu: 1
+        memory: 1G
+      package_install_script:
+        - dnf install -y firefox
+      env:
+        CI_DISTRO: fedora
+        CI_MAIN_MODULE: /usr/lib64/pkcs11/p11-kit-trust.so
+        CI_BAK_MODULE: /usr/lib64/pkcs11/p11-kit-trust.orig.so
+    - container:
+        image: debian:latest
+        cpu: 1
+        memory: 1G
+      package_install_script:
+        - apt-get update
+        - apt-get install -y curl firefox-esr
+      env:
+        CI_DISTRO: debian
+        CI_MAIN_MODULE: /usr/lib/firefox-esr/libnssckbi.so
+        CI_BAK_MODULE: /usr/lib/firefox-esr/libnssckbi.orig.so
+  install_script:
+    - curl -o pkcs11mod.tar.gz https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Compile%20Go%20latest%20linux%20amd64/binaries/dist/pkcs11mod.tar.gz
+    - tar -xaf ./pkcs11mod.tar.gz
+  test_script:
+    - testdata/ci-firefox-tests.bash
+  depends_on:
+    - "Compile Go latest linux amd64"
+
+task:
+  name: "$CI_PACKAGE_NAME $CI_CHANNEL $CI_DISABLE_E10S_NAME windows"
+  compute_engine_instance:
+    image_project: windows-cloud
+    image: family/windows-2022
+    platform: windows
+    cpu: 1
+    memory: 2G
+  choco_script:
+    - powershell -ExecutionPolicy Unrestricted -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))" && SET "PATH=%PATH%;%ALLUSERSPROFILE%\\chocolatey\\bin\\"
+  install_script:
+    - SET "PATH=%PATH%;%ALLUSERSPROFILE%\\chocolatey\\bin\\"
+    - choco install %CI_PACKAGE% --yes --pre
+    - curl -o pkcs11mod.tar.gz --location https://api.cirrus-ci.com/v1/artifact/build/%CIRRUS_BUILD_ID%/Compile%%%%20Go%%%%20latest%%%%20windows%%%%20%GOARCH%/binaries/dist/pkcs11mod.tar.gz
+    - tar -xf pkcs11mod.tar.gz
+  test_script:
+    - SET PATH=%PATH%;%cd%
+    - powershell -ExecutionPolicy Unrestricted -File "testdata/ci-firefox-tests.ps1"
+  env:
+    CI_PACKAGE_NAME: "Firefox"
+  matrix:
+    - env:
+        GOARCH: "amd64"
+        CI_CHANNEL: "Nightly"
+        CI_PACKAGE: "firefox-nightly"
+        CI_MAIN_MODULE: "C:\\Program Files\\Firefox Nightly\\nssckbi.dll"
+        CI_BAK_MODULE: "C:\\Program Files\\Firefox Nightly\\nssckbi.orig.dll"
+        CI_MAIN_EXE:  "C:\\Program Files\\Firefox Nightly\\firefox.exe"
+        CI_APPDATA: "Mozilla"
+    - env:
+        GOARCH: "amd64"
+        CI_CHANNEL: "Developer Edition"
+        CI_PACKAGE: "firefox-dev"
+        CI_MAIN_MODULE: "C:\\Program Files\\Firefox Developer Edition\\nssckbi.dll"
+        CI_BAK_MODULE: "C:\\Program Files\\Firefox Developer Edition\\nssckbi.orig.dll"
+        CI_MAIN_EXE:  "C:\\Program Files\\Firefox Developer Edition\\firefox.exe"
+        CI_APPDATA: "Mozilla"
+    - env:
+        GOARCH: "amd64"
+        CI_CHANNEL: "Beta"
+        CI_PACKAGE: "firefox-beta"
+        CI_MAIN_MODULE: "C:\\Program Files\\Mozilla Firefox\\nssckbi.dll"
+        CI_BAK_MODULE: "C:\\Program Files\\Mozilla Firefox\\nssckbi.orig.dll"
+        CI_MAIN_EXE:  "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
+        CI_APPDATA: "Mozilla"
+    - env:
+        GOARCH: "amd64"
+        CI_CHANNEL: "Rapid Release"
+        CI_PACKAGE: "firefox"
+        CI_MAIN_MODULE: "C:\\Program Files\\Mozilla Firefox\\nssckbi.dll"
+        CI_BAK_MODULE: "C:\\Program Files\\Mozilla Firefox\\nssckbi.orig.dll"
+        CI_MAIN_EXE:  "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
+        CI_APPDATA: "Mozilla"
+    - env:
+        GOARCH: "amd64"
+        CI_CHANNEL: "ESR"
+        CI_PACKAGE: "firefoxesr"
+        CI_MAIN_MODULE: "C:\\Program Files\\Mozilla Firefox\\nssckbi.dll"
+        CI_BAK_MODULE: "C:\\Program Files\\Mozilla Firefox\\nssckbi.orig.dll"
+        CI_MAIN_EXE:  "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
+        CI_APPDATA: "Mozilla"
+    - env:
+        GOARCH: "amd64"
+        CI_CHANNEL: "ESR"
+        CI_PACKAGE_NAME: "IceCat"
+        CI_PACKAGE: "icecat"
+        CI_MAIN_MODULE: "C:\\Program Files\\IceCat\\nssckbi.dll"
+        CI_BAK_MODULE: "C:\\Program Files\\IceCat\\nssckbi.orig.dll"
+        CI_MAIN_EXE:  "C:\\Program Files\\IceCat\\icecat.exe"
+        CI_APPDATA: "Mozilla"
+    - env:
+        GOARCH: "amd64"
+        CI_CHANNEL: "Rapid Release"
+        CI_PACKAGE_NAME: "LibreWolf"
+        CI_PACKAGE: "librewolf"
+        CI_MAIN_MODULE: "C:\\Program Files\\LibreWolf\\nssckbi.dll"
+        CI_BAK_MODULE: "C:\\Program Files\\LibreWolf\\nssckbi.orig.dll"
+        CI_MAIN_EXE:  "C:\\Program Files\\LibreWolf\\librewolf.exe"
+        CI_APPDATA: "librewolf"
+    - env:
+        GOARCH: "amd64"
+        CI_CHANNEL: "Current"
+        CI_PACKAGE_NAME: "Waterfox"
+        CI_PACKAGE: "waterfox"
+        CI_MAIN_MODULE: "C:\\Program Files\\Waterfox\\nssckbi.dll"
+        CI_BAK_MODULE: "C:\\Program Files\\Waterfox\\nssckbi.orig.dll"
+        CI_MAIN_EXE:  "C:\\Program Files\\Waterfox\\waterfox.exe"
+        CI_APPDATA: "Waterfox"
+  matrix:
+    - env:
+        CI_DISABLE_E10S: "1"
+        CI_DISABLE_E10S_NAME: "No-E10S"
+    - env:
+        CI_DISABLE_E10S: "0"
+        CI_DISABLE_E10S_NAME: ""
+  depends_on:
+    - "Compile Go latest windows amd64"
+
+task:
+  name: "gnutls-cli"
+  container:
+    image: fedora:latest
+    cpu: 1
+    memory: 1G
+  install_script:
+    - dnf install -y gnutls-utils
+    - curl -o pkcs11mod.tar.gz https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Compile%20Go%20latest%20linux%20amd64/binaries/dist/pkcs11mod.tar.gz
+    - tar -xaf ./pkcs11mod.tar.gz
+  test_script:
+    - testdata/ci-gnutls-cli-tests.bash
+  depends_on:
+    - "Compile Go latest linux amd64"
+
+task:
+  name: "OpenDNSSEC"
+  container:
+    image: fedora:latest
+    cpu: 1
+    memory: 1G
+  install_script:
+    - dnf install -y git autoconf libtool g++ softhsm opensc diffutils
+    - curl -o pkcs11mod.tar.gz https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Compile%20Go%20latest%20linux%20amd64/binaries/dist/pkcs11mod.tar.gz
+    - tar -xaf ./pkcs11mod.tar.gz
+  opendnssec_build_script:
+    - git clone https://github.com/opendnssec/pkcs11-testing.git
+    - cd pkcs11-testing
+    - chmod +x autogen.sh
+    - ./autogen.sh
+    - ./configure --disable-dependency-tracking
+    - make install
+  test_script:
+    - testdata/ci-opendnssec-tests.bash
+  depends_on:
+    - "Compile Go latest linux amd64"
+
+task:
+  name: "pkcs11-dump"
+  container:
+    image: fedora:latest
+    cpu: 1
+    memory: 1G
+  install_script:
+    - dnf install -y pkcs11-dump diffutils
+    - curl -o pkcs11mod.tar.gz https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Compile%20Go%20latest%20linux%20amd64/binaries/dist/pkcs11mod.tar.gz
+    - tar -xaf ./pkcs11mod.tar.gz
+  test_script:
+    - testdata/ci-pkcs11-dump-tests.bash
+  depends_on:
+    - "Compile Go latest linux amd64"
+
+task:
+  name: "tstclnt $CI_DISTRO"
+  matrix:
+    - container:
+        image: fedora:latest
+        cpu: 1
+        memory: 1G
+      package_install_script:
+        - dnf install -y nss-tools
+      env:
+        CI_DISTRO: fedora
+        CI_MAIN_MODULE: /usr/lib64/pkcs11/p11-kit-trust.so
+        CI_BAK_MODULE: /usr/lib64/pkcs11/p11-kit-trust.orig.so
+    - container:
+        image: debian:latest
+        cpu: 1
+        memory: 1G
+      package_install_script:
+        - apt-get update
+        - apt-get install -y curl libnss3-tools
+      env:
+        CI_DISTRO: debian
+        CI_MAIN_MODULE: /usr/lib/x86_64-linux-gnu/nss/libnssckbi.so
+        CI_BAK_MODULE: /usr/lib/x86_64-linux-gnu/nss/libnssckbi.orig.so
+  install_script:
+    - curl -o pkcs11mod.tar.gz https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Compile%20Go%20latest%20linux%20amd64/binaries/dist/pkcs11mod.tar.gz
+    - tar -xaf ./pkcs11mod.tar.gz
+  test_script:
+    - export PATH=$PATH:/usr/lib64/nss/unsupported-tools
+    - testdata/ci-tstclnt-tests.bash
+  depends_on:
+    - "Compile Go latest linux amd64"
+
+task:
+  name: "wget"
+  container:
+    image: fedora:latest
+    cpu: 1
+    memory: 1G
+  install_script:
+    - dnf install -y wget
+    - curl -o pkcs11mod.tar.gz https://api.cirrus-ci.com/v1/artifact/build/$CIRRUS_BUILD_ID/Compile%20Go%20latest%20linux%20amd64/binaries/dist/pkcs11mod.tar.gz
+    - tar -xaf ./pkcs11mod.tar.gz
+  test_script:
+    - testdata/ci-wget-tests.bash
+  depends_on:
+    - "Compile Go latest linux amd64"
+
+# TODO: Add Windows unit tests
+
+# TODO: "Testing config parsing" from travis.bash
+
+# TODO: Add multiple Go versions to Gox builds and unit tests
+
+# TODO: Add debug stripping and path stripping to Gox for repro builds
+
+# TODO: Re-add darwin/386 for old Go versions where it was supported
+
+# TODO: Fix upload repo for tagged commits (don't use Nightly repo for this)
+
+# TODO: Skip Signify and Release if it's not applicable
+
+# TODO: Signify Nightlies
+
+# TODO: IRC notifications on failure
+
+# TODO: Cron

@@ -1,2 +1,4 @@
 github.com/miekg/pkcs11 v1.1.2 h1:/VxmeAX5qU6Q3EwafypogwWbYryHFmF2RpkJmw3m4MQ=
 github.com/miekg/pkcs11 v1.1.2/go.mod h1:XsNlhZGX73bx86s2hdc/FuaLm2CPZJemRLMA+WTFxgs=
+github.com/namecoin/pkcs11mod v0.0.2-0.20221111002037-8389aedc2a5f h1:MGBPJNj/D1Sq5DmowkNMDNEfoPCb8fEOKDGNyQoRm60=
+github.com/namecoin/pkcs11mod v0.0.2-0.20221111002037-8389aedc2a5f/go.mod h1:QoLd4U09mkv2P03epvTq+54XvgYV4+kPl63MDC93Hhw=

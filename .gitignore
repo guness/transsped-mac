@@ -6,3 +6,7 @@ _pub.pem
 leaf_cert.pem
 chain.pem
 .superpowers/
+
+# Stray top-level binary from `go build ./cmd/pkcs11/` (no -o given)
+/pkcs11
+/cmd/pkcs11/pkcs11

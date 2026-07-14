@@ -1,0 +1,9 @@
+/libnamecoin.h
+/libnamecoin.so
+/*.a
+/*.o
+/moz/web-ext-artifacts/
+go.mod
+go.sum
+/spec
+strings.go

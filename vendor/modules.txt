@@ -1,0 +1,6 @@
+# github.com/miekg/pkcs11 v1.1.2
+## explicit; go 1.12
+github.com/miekg/pkcs11
+# github.com/namecoin/pkcs11mod v0.0.2-0.20221111002037-8389aedc2a5f
+## explicit
+github.com/namecoin/pkcs11mod
