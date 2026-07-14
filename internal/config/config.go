@@ -3,6 +3,7 @@ package config
 import (
 	"crypto/x509"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -35,7 +36,21 @@ func Save(cfg *Config, leafDER []byte, interDER [][]byte) error {
 		return err
 	}
 	for i, d := range interDER {
-		_ = os.WriteFile(filepath.Join(dir, "intermediate"+string(rune('0'+i))+".der"), d, 0o600)
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("intermediate%d.der", i)), d, 0o600); err != nil {
+			return err
+		}
+	}
+	// Prune any stale intermediate files left over from a previous, larger
+	// save (e.g. a shrinking re-save from 2 intermediates to 1), so Load()
+	// never picks up a leftover cert as current.
+	for j := len(interDER); ; j++ {
+		path := filepath.Join(dir, fmt.Sprintf("intermediate%d.der", j))
+		if err := os.Remove(path); err != nil {
+			if os.IsNotExist(err) {
+				break
+			}
+			return err
+		}
 	}
 	return nil
 }
@@ -60,7 +75,7 @@ func Load() (*Config, *x509.Certificate, []*x509.Certificate, error) {
 	}
 	var inter []*x509.Certificate
 	for i := 0; ; i++ {
-		d, err := os.ReadFile(filepath.Join(dir, "intermediate"+string(rune('0'+i))+".der"))
+		d, err := os.ReadFile(filepath.Join(dir, fmt.Sprintf("intermediate%d.der", i)))
 		if err != nil {
 			break
 		}
