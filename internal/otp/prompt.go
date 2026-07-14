@@ -24,7 +24,10 @@ func (OSAScript) OTP(prompt string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func escape(s string) string { return strings.ReplaceAll(s, `"`, `\"`) }
+func escape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	return strings.ReplaceAll(s, `"`, `\"`)
+}
 
 // Static is a test/CI prompter.
 type Static struct{ Value string }
