@@ -6,6 +6,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"tscloud/internal/config"
 	"tscloud/internal/csc"
@@ -21,7 +22,14 @@ func init() {
 		log.Printf("tscloud pkcs11: config load failed: %v", err)
 		return
 	}
-	signer := &csc.Signer{Client: csc.New(cfg.BaseURL), CredentialID: cfg.CredentialID, OTP: otp.OSAScript{}}
+	// Headless OTP override for automated/CI testing: when TSCLOUD_OTP is set,
+	// use it as a static OTP instead of popping the interactive osascript
+	// dialog. Unset (the default, real-user path) is unchanged.
+	var prompter otp.Prompter = otp.OSAScript{}
+	if v := os.Getenv("TSCLOUD_OTP"); v != "" {
+		prompter = otp.Static{Value: v}
+	}
+	signer := &csc.Signer{Client: csc.New(cfg.BaseURL), CredentialID: cfg.CredentialID, OTP: prompter}
 	pkcs11mod.SetBackend(token.NewBackend(token.BuildObjects(leaf, inter), signer))
 }
 
