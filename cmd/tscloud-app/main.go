@@ -26,8 +26,23 @@ import (
 const moduleName = "TransSpedCloud"
 
 func main() {
-	gui := len(os.Args) < 2 || os.Args[1] != "-cli" // .app double-click => GUI dialogs
+	gui, uninstall := true, false // .app double-click => GUI dialogs
+	for _, a := range os.Args[1:] {
+		switch a {
+		case "-cli":
+			gui = false
+		case "-uninstall":
+			uninstall = true
+		}
+	}
+	if uninstall {
+		runUninstall(gui)
+		return
+	}
+	runInstall(gui)
+}
 
+func runInstall(gui bool) {
 	// 1. Locate the module dylib (bundled in .app Resources, or next to the binary).
 	dylibSrc, err := findDylib()
 	fail(gui, err)
@@ -69,6 +84,94 @@ func main() {
 	}
 	msg += "\n\nOpen Firefox, go to your ANAF login, choose the certificate method, pick \"Trans Sped Cloud\", and enter your PIN + OTP when prompted."
 	notify(gui, msg)
+}
+
+// runUninstall reverses runInstall: it removes the TransSpedCloud module from
+// the default Firefox profile's pkcs11.txt and deletes ~/.config/tscloud. It
+// touches nothing else.
+func runUninstall(gui bool) {
+	if !confirm(gui, "Remove EasySign for Mac?\n\nThis unregisters the \"Trans Sped Cloud\" module from Firefox and deletes ~/.config/tscloud. Your Firefox and its other certificates are left untouched.") {
+		return
+	}
+	if isFirefoxRunning() {
+		fail(gui, fmt.Errorf("please QUIT Firefox first, then run this again (it must be closed to remove the security module)"))
+	}
+
+	var notes []string
+	if prof, err := defaultFirefoxProfile(); err == nil {
+		removed, err := unregisterModule(prof)
+		fail(gui, err)
+		if removed {
+			notes = append(notes, "Removed the module from Firefox.")
+		} else {
+			notes = append(notes, "Module was not registered in Firefox (nothing to remove).")
+		}
+	} else {
+		// No profile / no profiles.ini: nothing to unregister, but still clean config.
+		notes = append(notes, "No Firefox profile found to update.")
+	}
+
+	dir := config.Dir()
+	if _, err := os.Stat(dir); err == nil {
+		fail(gui, os.RemoveAll(dir))
+		notes = append(notes, "Deleted "+dir+".")
+	}
+
+	notify(gui, "Uninstall complete.\n\n"+strings.Join(notes, "\n"))
+}
+
+// unregisterModule drops any pkcs11.txt record naming our module (by name or by
+// the library path under ~/.config/tscloud), tolerating NSS having rewritten
+// the file into its own canonical record form. Returns whether it removed one.
+func unregisterModule(profile string) (bool, error) {
+	p := filepath.Join(profile, "pkcs11.txt")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("reading %s: %w", p, err)
+	}
+	stableDylib := filepath.Join(config.Dir(), "libtscloud-pkcs11.dylib")
+
+	// pkcs11.txt is blank-line-separated records of key=value lines.
+	var records [][]string
+	var cur []string
+	flush := func() {
+		if len(cur) > 0 {
+			records = append(records, cur)
+			cur = nil
+		}
+	}
+	for _, ln := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(ln) == "" {
+			flush()
+			continue
+		}
+		cur = append(cur, ln)
+	}
+	flush()
+
+	removed := false
+	var kept []string
+	for _, rec := range records {
+		ours := false
+		for _, ln := range rec {
+			switch strings.TrimSpace(ln) {
+			case "name=" + moduleName, "library=" + stableDylib:
+				ours = true
+			}
+		}
+		if ours {
+			removed = true
+			continue
+		}
+		kept = append(kept, strings.Join(rec, "\n"))
+	}
+	if !removed {
+		return false, nil
+	}
+	return true, os.WriteFile(p, []byte(strings.Join(kept, "\n\n")+"\n"), 0o600)
 }
 
 // findDylib returns the module path: $APP/Contents/Resources/… when bundled,
@@ -243,6 +346,21 @@ func prompt(gui bool, message string) (string, error) {
 		return "", fmt.Errorf("cancelled")
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// confirm asks a yes/no question. GUI: a two-button dialog (default Cancel).
+// CLI: a y/N stdin prompt. Returns true only on explicit confirmation.
+func confirm(gui bool, message string) bool {
+	if !gui {
+		fmt.Print(message + "\n\nProceed? [y/N] ")
+		var s string
+		fmt.Scanln(&s)
+		s = strings.ToLower(strings.TrimSpace(s))
+		return s == "y" || s == "yes"
+	}
+	script := `display dialog "` + esc(message) + `" with title "EasySign for Mac — Uninstall" with icon caution buttons {"Cancel","Uninstall"} default button "Cancel"`
+	// osascript exits non-zero if the user cancels; a clean exit means "Uninstall".
+	return exec.Command("osascript", "-e", script).Run() == nil
 }
 
 func notify(gui bool, message string) {

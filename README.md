@@ -2,23 +2,23 @@
 
 `tscloud` is a macOS **PKCS#11 module** that lets **Firefox** present your
 **Trans Sped cloud qualified certificate** for client-certificate TLS, so you
-can log in to **ANAF SPV** (`pfinternet.anaf.ro`) from a Mac — no Windows VM,
-no Wine, no physical token.
+can log in to **ANAF SPV** (`pfinternet.anaf.ro` / `app.anaf.ro`) from a Mac —
+no Windows VM, no Wine, no physical token.
 
 On Windows, EasySign / the "Trans Sped Cloud KSP" makes the cloud-held
 private key usable by the browser's TLS stack: when ANAF requests a client
 certificate mid-handshake, Windows forwards the handshake hash to Trans
-Sped's cloud, prompts for an OTP, and returns the signature. macOS has no
+Sped's cloud, prompts for PIN + OTP, and returns the signature. macOS has no
 CNG/KSP layer, so `tscloud` replaces it with a PKCS#11 module loaded into
 Firefox's NSS:
 
 ```
-Firefox (dedicated profile, TLS pinned to 1.2)
-  │  ANAF requests a client cert → NSS needs a CertificateVerify signature
+Firefox (your normal profile)
+  │  ANAF's F5 BIG-IP APM requests a client cert (via TLS renegotiation)
   ▼
 NSS ──C_Sign(DigestInfo(SHA-256, handshake hash))──▶  libtscloud-pkcs11.dylib
                                                           │ parse DigestInfo,
-                                                          │ OTP dialog,
+                                                          │ PIN + OTP dialogs,
                                                           │ authorize + signHash
                                                           ▼
                                                     Trans Sped cloud (CSC API)
@@ -27,102 +27,101 @@ NSS ──C_Sign(DigestInfo(SHA-256, handshake hash))──▶  libtscloud-pkcs1
 
 `C_Sign` forwards the TLS handshake hash to Trans Sped's CSC cloud API
 (`signatures/signHash`), i.e. it is the macOS equivalent of the Windows
-"Cloud KSP". TLS is pinned to **1.2**: the cloud only produces RSA
-PKCS#1 v1.5 signatures (no RSA-PSS), and TLS 1.3's CertificateVerify
-requires PSS, so 1.3 client auth is impossible with this cloud.
+"Cloud KSP". The working ANAF portal (`app.anaf.ro`) runs on an **F5 BIG-IP
+APM** that requests the client cert via TLS **renegotiation** and offers
+`rsa_pkcs1_sha256`, which the cloud can sign.
 
 **Scope:** interactive ANAF SPV login in Firefox only. See
 [Scope / non-goals](#scope--non-goals) below.
 
-## Prerequisites
+## Install (the app)
 
-- **Go 1.22+** (developed against 1.26; `go.mod` requires `go 1.22`)
-- **Xcode Command Line Tools** (`xcode-select --install`) — provides `clang`/`cc`, needed for the cgo build
-- `brew install nss opensc` — `nss` provides `modutil`/`certutil` (Firefox profile setup), `opensc` provides `pkcs11-tool` (testing/diagnostics)
-- **Firefox** — required; Chrome and Safari use the macOS Keychain for client certs and have no PKCS#11 loader, so they cannot use this module
-- An existing **Trans Sped cloud qualified certificate**, already enrolled with ANAF (form 150) — enrollment itself is out of scope, see below
+The simplest path is the packaged setup app — it touches **only** your normal
+Firefox, additively, and needs no scripts, no separate profile, and no changes
+to your existing certificates.
 
-## Build
+1. **Quit Firefox** (a security module can't be added while it's running).
+2. Open **`EasySign for Mac.app`** (double-click, or `open "EasySign for Mac.app"`).
+3. Enter your **Trans Sped userID** (the email or phone registered for your
+   cloud certificate) when prompted. The app fetches your certificate, copies
+   the module to `~/.config/tscloud/`, and registers it into your default
+   Firefox profile's `pkcs11.txt`.
+4. It reports **"Setup complete."**
 
-```bash
-./scripts/build.sh
-```
+Then use Firefox as usual (see [Daily use](#daily-use)).
 
-Produces, in the repo root:
-- `libtscloud-pkcs11.dylib` — the PKCS#11 module (arm64, ad-hoc codesigned)
-- `tscloud-setup` — the one-time credential-fetch CLI
+To build the app from a checkout: `./scripts/build-app.sh` → `EasySign for Mac.app`.
 
-Neither binary is committed to git (see `.gitignore`); build them locally.
-
-## One-time setup (order matters)
-
-**1. Fetch your cloud certificate:**
+### Uninstall
 
 ```bash
-./tscloud-setup -user "<your Trans Sped email or phone>"
+open "EasySign for Mac.app" --args -uninstall     # GUI confirm, then removes everything
+# or from a terminal:
+./EasySign\ for\ Mac.app/Contents/MacOS/tscloud-app -uninstall -cli
 ```
 
-This calls the Trans Sped CSC API (`credentials/list` → `credentials/info`)
-and writes:
-
-```
-~/.config/tscloud/config.json        # baseURL, userID, credentialID, label
-~/.config/tscloud/leaf.der           # your certificate, DER
-~/.config/tscloud/intermediate0.der  # issuing CA chain (Trans Sped QCA), DER
-~/.config/tscloud/intermediate1.der  # (if more than one)
-```
-
-On success it prints the `credentialID` and the account's `SCAL` value (see
-[How it works](#how-it-works) below). If `credentials/list` comes back
-empty, your certificate is probably on a different backend — see
-[Troubleshooting in the runbook](docs/RUNBOOK.md).
-
-**2. Set up the dedicated Firefox profile:**
-
-```bash
-./scripts/setup-firefox.sh
-```
-
-Creates `~/.tscloud-firefox` (a profile separate from your normal Firefox
-profile, so these settings never affect everyday browsing), loads
-`libtscloud-pkcs11.dylib` into its NSS database, pins
-`security.tls.version.{min,max} = 3` (TLS 1.2 only) in `user.js`, and
-imports any `~/.config/tscloud/intermediate*.der` so the client-cert chain
-builds.
-
-Run step 1 before step 2 — `setup-firefox.sh` imports intermediates from
-`~/.config/tscloud`, which only exists after `tscloud-setup` has run.
+This unregisters the `TransSpedCloud` module from your Firefox profile and
+deletes `~/.config/tscloud`. (You can also unload it manually from Firefox →
+Settings → Privacy & Security → **Security Devices** → **Unload**.)
 
 ## Daily use
 
-```bash
-/Applications/Firefox.app/Contents/MacOS/firefox -profile "$HOME/.tscloud-firefox" -no-remote
-```
+Open your normal Firefox, then:
 
-Then:
-1. Go to `https://pfinternet.anaf.ro`.
-2. Click **"Autentificare certificat"**.
+1. Go to your ANAF SPV login (e.g. `https://pfinternet.anaf.ro`).
+2. Choose the **certificate** authentication method.
 3. Pick the **Trans Sped Cloud** certificate from the picker.
-4. Approve the OTP prompt (native macOS dialog, from the Trans Sped OTP app
-   or SMS).
+4. Enter your **PIN** and then the **OTP** in the native macOS dialogs (OTP
+   from the Trans Sped app or email).
 5. The SPV dashboard loads.
 
 ## How it works
 
+- **PIN + OTP per login.** ANAF's F5 APM requests the client cert via TLS
+  renegotiation, during which NSS never performs `C_Login` — so the module
+  collects **both PIN and OTP itself, at signing time** (native `osascript`
+  dialogs), mirroring the single PIN+OTP prompt of the Windows KSP.
 - **~1 OTP per login.** Your account has `SCAL = 2` — each signing
   authorization (SAD) is OTP-bound to one specific hash. A normal SPV login
-  performs exactly one client-cert TLS handshake, so it costs one OTP,
-  matching the existing Windows experience. See
-  [docs/RUNBOOK.md](docs/RUNBOOK.md) for how to measure this on your first
-  real login.
-- **TLS must stay pinned to 1.2.** The cloud only ever produces RSA
-  PKCS#1 v1.5 signatures (no RSA-PSS). TLS 1.3's CertificateVerify mandates
-  PSS, so 1.3 client auth is impossible with this backend — hence
-  `setup-firefox.sh` forces `security.tls.version.max = 3`. Do not change
-  this setting in the `tscloud-firefox` profile.
-- **Firefox is required.** Chrome and Safari get client certificates from
-  the macOS Keychain and have no PKCS#11 module loader; only Firefox (via
-  NSS) can load `libtscloud-pkcs11.dylib`.
+  performs one client-cert handshake, so it costs one OTP, matching the
+  Windows experience. See [docs/RUNBOOK.md](docs/RUNBOOK.md) for how to
+  measure this on your first real login.
+- **No TLS version pin needed.** The cloud only ever produces RSA PKCS#1 v1.5
+  signatures (no RSA-PSS), so TLS 1.3 client auth would be impossible with
+  this backend — but ANAF's certificate endpoints are **TLS 1.2-only**
+  anyway, so Firefox always negotiates 1.2 with them and there is nothing to
+  configure.
+- **Firefox is required.** Chrome and Safari get client certificates from the
+  macOS Keychain and have no PKCS#11 module loader; only Firefox (via NSS)
+  can load `libtscloud-pkcs11.dylib`.
+- **The module is inert for normal browsing.** NSS only invokes it when a
+  site's `CertificateRequest` names a CA that matches your Trans Sped cert's
+  issuer — in practice just ANAF.
+
+## Build from source (developers)
+
+### Prerequisites
+
+- **Go 1.22+** (developed against 1.26; `go.mod` requires `go 1.22`)
+- **Xcode Command Line Tools** (`xcode-select --install`) — provides `clang`/`cc`, needed for the cgo build
+- `brew install opensc` — provides `pkcs11-tool` for testing/diagnostics (optional)
+- **Firefox** — required at runtime; Chrome and Safari cannot use this module
+- An existing **Trans Sped cloud qualified certificate**, already enrolled with ANAF (form 150) — enrollment itself is out of scope, see below
+
+### Build
+
+```bash
+./scripts/build.sh       # libtscloud-pkcs11.dylib + tscloud-setup (CLI)
+./scripts/build-app.sh   # EasySign for Mac.app (bundles the dylib + setup app)
+```
+
+Built binaries are not committed to git (see `.gitignore`); build them locally.
+
+`tscloud-setup -user "<email or phone>"` is the standalone credential-fetch CLI
+(the app does the same thing internally). It calls the Trans Sped CSC API
+(`credentials/list` → `credentials/info`) and writes to `~/.config/tscloud/`:
+`config.json` (baseURL, userID, credentialID, label), `leaf.der` (your cert),
+and `intermediate*.der` (the issuing CA chain).
 
 ## Testing
 
@@ -139,9 +138,6 @@ go test ./...
   local mock CSC server (`test/cscmock`), with the resulting signature
   verified against the cert's public key via `openssl`. Run it directly:
   `./scripts/sign-test.sh`.
-- `scripts/firefox-setup.md` — how the module's NSS load path (`modutil
-  -add`) was validated on throwaway NSS databases, both with and without a
-  saved credential.
 
 None of the above touch your real Trans Sped account or `~/.config/tscloud`.
 
@@ -163,8 +159,7 @@ None of the above touch your real Trans Sped account or `~/.config/tscloud`.
   runtime rejects a relative-path `dlopen()`; `pkcs11-tool --module
   ./libtscloud-pkcs11.dylib ...` fails with "relative path not allowed in
   hardened program". Always pass an absolute path, e.g. `--module
-  "$(pwd)/libtscloud-pkcs11.dylib"`. `setup-firefox.sh` already resolves the
-  dylib path absolutely for this reason.
+  "$(pwd)/libtscloud-pkcs11.dylib"`.
 - **No `.h` file is generated by the build.** `-buildmode=c-shared` only
   emits a public header for `//export` directives living in `package main`;
   `pkcs11mod`'s `//export` glue lives in the vendored package, not in
@@ -174,11 +169,9 @@ None of the above touch your real Trans Sped account or `~/.config/tscloud`.
 
 ## Security
 
-- The Trans Sped **signature PIN** is collected once via Firefox's own
-  PKCS#11 PIN dialog at login (`C_Login`) and cached in memory for the
-  session only — never written to disk.
-- The **OTP** is collected per signature via a native `osascript` dialog —
-  also never written to disk or logged.
+- The Trans Sped **signature PIN** and **OTP** are each collected per login
+  via a native `osascript` dialog and used only to authorize that one
+  signature — never written to disk or logged.
 - `~/.config/tscloud/` holds only your **public** certificate chain
   (`leaf.der`, `intermediate*.der`) and non-secret identifiers
   (`config.json`: base URL, user ID, credential ID, label). No private key
@@ -195,6 +188,9 @@ None of the above touch your real Trans Sped account or `~/.config/tscloud`.
   already be enrolled with ANAF (form 150); do that on Windows or with your
   existing tooling first.
 - **Not Chrome/Safari** — see [How it works](#how-it-works) above.
+- **The OAuth portal** (`logincert.anaf.ro` → `login.anaf.ro`) requests
+  `rsa_pkcs1_sha384`, which the cloud rejects; the working path is the F5 APM
+  portal (`app.anaf.ro`) with SHA-256.
 
 ## Further reading
 
