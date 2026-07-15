@@ -1,4 +1,4 @@
-// Command tscloud-app is the one-shot setup "app" for EasySign-mac. Run once
+// Command tscloud-app is the one-shot setup "app" for TransSped (macOS). Run once
 // (double-clicked from a .app bundle, or from a terminal), it:
 //  1. asks for the Trans Sped userID and fetches the cloud certificate,
 //  2. copies the PKCS#11 module to a stable location, and
@@ -90,7 +90,7 @@ func runInstall(gui bool) {
 // the default Firefox profile's pkcs11.txt and deletes ~/.config/tscloud. It
 // touches nothing else.
 func runUninstall(gui bool) {
-	if !confirm(gui, "Remove EasySign for Mac?\n\nThis unregisters the \"Trans Sped Cloud\" module from Firefox and deletes ~/.config/tscloud. Your Firefox and its other certificates are left untouched.") {
+	if !confirm(gui, "Remove TransSped?\n\nThis unregisters the \"Trans Sped Cloud\" module from Firefox and deletes ~/.config/tscloud. Your Firefox and its other certificates are left untouched.") {
 		return
 	}
 	if isFirefoxRunning() {
@@ -340,7 +340,7 @@ func prompt(gui bool, message string) (string, error) {
 		fmt.Scanln(&s)
 		return strings.TrimSpace(s), nil
 	}
-	script := `display dialog "` + esc(message) + `" default answer "" with title "EasySign for Mac — Setup" buttons {"Cancel","OK"} default button "OK"`
+	script := `display dialog "` + esc(message) + `" default answer "" with title "TransSped — Setup" buttons {"Cancel","OK"} default button "OK"`
 	out, err := exec.Command("osascript", "-e", script, "-e", "text returned of result").Output()
 	if err != nil {
 		return "", fmt.Errorf("cancelled")
@@ -358,7 +358,7 @@ func confirm(gui bool, message string) bool {
 		s = strings.ToLower(strings.TrimSpace(s))
 		return s == "y" || s == "yes"
 	}
-	script := `display dialog "` + esc(message) + `" with title "EasySign for Mac — Uninstall" with icon caution buttons {"Cancel","Uninstall"} default button "Cancel"`
+	script := `display dialog "` + esc(message) + `" with title "TransSped — Uninstall" with icon caution buttons {"Cancel","Uninstall"} default button "Cancel"`
 	// osascript exits non-zero if the user cancels; a clean exit means "Uninstall".
 	return exec.Command("osascript", "-e", script).Run() == nil
 }
@@ -368,7 +368,7 @@ func notify(gui bool, message string) {
 		fmt.Println(message)
 		return
 	}
-	exec.Command("osascript", "-e", `display dialog "`+esc(message)+`" with title "EasySign for Mac — Setup" buttons {"OK"} default button "OK"`).Run()
+	exec.Command("osascript", "-e", `display dialog "`+esc(message)+`" with title "TransSped — Setup" buttons {"OK"} default button "OK"`).Run()
 }
 
 func fail(gui bool, err error) {
@@ -376,7 +376,7 @@ func fail(gui bool, err error) {
 		return
 	}
 	if gui {
-		exec.Command("osascript", "-e", `display dialog "Setup could not complete:\n\n`+esc(err.Error())+`" with title "EasySign for Mac — Setup" with icon caution buttons {"OK"} default button "OK"`).Run()
+		exec.Command("osascript", "-e", `display dialog "Setup could not complete:\n\n`+esc(err.Error())+`" with title "TransSped — Setup" with icon caution buttons {"OK"} default button "OK"`).Run()
 	} else {
 		fmt.Fprintln(os.Stderr, "error:", err)
 	}

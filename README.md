@@ -41,7 +41,7 @@ Firefox, additively, and needs no scripts, no separate profile, and no changes
 to your existing certificates.
 
 1. **Quit Firefox** (a security module can't be added while it's running).
-2. Open **`EasySign for Mac.app`** (double-click, or `open "EasySign for Mac.app"`).
+2. Open **`TransSped.app`** (double-click, or `open "TransSped.app"`).
 3. Enter your **Trans Sped userID** (the email or phone registered for your
    cloud certificate) when prompted. The app fetches your certificate, copies
    the module to `~/.config/tscloud/`, and registers it into your default
@@ -50,14 +50,14 @@ to your existing certificates.
 
 Then use Firefox as usual (see [Daily use](#daily-use)).
 
-To build the app from a checkout: `./scripts/build-app.sh` → `EasySign for Mac.app`.
+To build the app from a checkout: `./scripts/build-app.sh` → `TransSped.app`.
 
 ### Uninstall
 
 ```bash
-open "EasySign for Mac.app" --args -uninstall     # GUI confirm, then removes everything
+open "TransSped.app" --args -uninstall     # GUI confirm, then removes everything
 # or from a terminal:
-./EasySign\ for\ Mac.app/Contents/MacOS/tscloud-app -uninstall -cli
+./TransSped.app/Contents/MacOS/tscloud-app -uninstall -cli
 ```
 
 This unregisters the `TransSpedCloud` module from your Firefox profile and
@@ -112,7 +112,7 @@ Open your normal Firefox, then:
 
 ```bash
 ./scripts/build.sh       # libtscloud-pkcs11.dylib + tscloud-setup (CLI)
-./scripts/build-app.sh   # EasySign for Mac.app (bundles the dylib + setup app)
+./scripts/build-app.sh   # TransSped.app (bundles the dylib + setup app)
 ```
 
 Built binaries are not committed to git (see `.gitignore`); build them locally.

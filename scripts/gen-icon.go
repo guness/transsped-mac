@@ -1,6 +1,6 @@
 //go:build ignore
 
-// Command gen-icon renders the "EasySign for Mac" app icon as a 1024x1024 PNG
+// Command gen-icon renders the "TransSped" app icon as a 1024x1024 PNG
 // with no external assets: a blue rounded-square (macOS-style, with margin for
 // the system drop shadow) carrying a bold white checkmark — evoking a verified
 // signature / successful login. Edges are anti-aliased by 4x supersampling.

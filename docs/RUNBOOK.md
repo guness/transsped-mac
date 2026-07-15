@@ -12,7 +12,7 @@ needs your real Trans Sped account and a live OTP.
 ## Step 1 — Install with the app
 
 1. **Quit Firefox** — a security module can't be added while it's running.
-2. Open **`EasySign for Mac.app`** (double-click, or `open "EasySign for Mac.app"`).
+2. Open **`TransSped.app`** (double-click, or `open "TransSped.app"`).
 3. Enter your **Trans Sped userID** (the email or phone registered for your
    cloud certificate) when the dialog asks.
 4. Expect **"Setup complete."** Behind the scenes the app fetched your
@@ -60,13 +60,13 @@ entering the OTP, note the approximate delay before it gave up.
 | Login loops / repeated OTP prompts with no progress | This was the original bug when the token was login-required (NSS sent an empty cert during F5 renegotiation). The shipped module reports **not login-required** to avoid it; if you see it, you're likely running an old dylib — re-run the app to refresh `~/.config/tscloud/libtscloud-pkcs11.dylib`. |
 | Handshake fails or times out | Approve the PIN/OTP dialogs promptly — the TLS handshake is waiting on them. To confirm what was negotiated, capture the session: `SSLKEYLOGFILE=/tmp/ff.keys open -a Firefox`, reproduce the login, then open the capture in Wireshark (set `tls.keylog_file` to `/tmp/ff.keys` under Preferences → Protocols → TLS) and confirm the handshake used **TLS 1.2** and signature scheme **rsa_pkcs1_sha256**. |
 | Module not listed in Firefox at all | Confirm `pkcs11.txt` in your default profile contains a `name=TransSpedCloud` line. Re-run the app (with Firefox quit) to re-register. To find your default profile: it's the `[Install…] Default` (or `Default=1`) entry in `~/Library/Application Support/Firefox/profiles.ini`. |
-| `EasySign for Mac.app` reports "no cloud credential found" | Your certificate may be a **mobile-eIDAS** credential rather than a standard qualified cert — those live on a different backend (`https://services.cloudsignature.online/csc/v1/` with OAuth2), which this tool does not support (it targets `https://msign.transsped.ro/csc/v0/local/` only). Confirm with whoever issued your Trans Sped credential which backend it's on. |
+| `TransSped.app` reports "no cloud credential found" | Your certificate may be a **mobile-eIDAS** credential rather than a standard qualified cert — those live on a different backend (`https://services.cloudsignature.online/csc/v1/` with OAuth2), which this tool does not support (it targets `https://msign.transsped.ro/csc/v0/local/` only). Confirm with whoever issued your Trans Sped credential which backend it's on. |
 | PIN rejected / OTP rejected | Confirm you're entering your **Trans Sped signature PIN/password** (not your ANAF portal password), and that the OTP is the current one from the Trans Sped app or SMS (they expire quickly — start a fresh login attempt if it lapses). |
 
 ## Uninstall / reset
 
 ```bash
-open "EasySign for Mac.app" --args -uninstall
+open "TransSped.app" --args -uninstall
 ```
 
 Unregisters `TransSpedCloud` from your Firefox profile and deletes
@@ -79,7 +79,7 @@ again.
 ## ✅ CONFIRMED WORKING FLOW (2026-07-15)
 
 Verified end-to-end: a Trans Sped **cloud** qualified cert logging into ANAF SPV
-on macOS **normal** Firefox, reproducibly, via `EasySign for Mac.app`.
+on macOS **normal** Firefox, reproducibly, via `TransSped.app`.
 
 **Why the module is configured "not login required":** ANAF's F5 APM requests
 the cert via TLS **renegotiation**, during which NSS never performs a

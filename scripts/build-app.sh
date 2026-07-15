@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds "EasySign for Mac.app" — a double-clickable setup app that fetches the
+# Builds "TransSped.app" — a double-clickable setup app that fetches the
 # Trans Sped cloud cert and registers the PKCS#11 module into the user's normal
 # Firefox profile (no dedicated profile, no TLS pin, no disabling of existing
 # certs). Run once; then use Firefox as usual for ANAF.
@@ -13,7 +13,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP="EasySign for Mac.app"
+APP="TransSped.app"
 ARCH="${GOARCH:-arm64}"
 SIGN_ID="${SIGN_ID:-}"
 
@@ -53,9 +53,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>CFBundleName</key><string>EasySign for Mac</string>
-  <key>CFBundleDisplayName</key><string>EasySign for Mac</string>
-  <key>CFBundleIdentifier</key><string>ro.transsped.easysign-mac</string>
+  <key>CFBundleName</key><string>TransSped</string>
+  <key>CFBundleDisplayName</key><string>TransSped</string>
+  <key>CFBundleIdentifier</key><string>ro.transsped.macos</string>
   <key>CFBundleVersion</key><string>1.0</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>CFBundleExecutable</key><string>tscloud-app</string>
