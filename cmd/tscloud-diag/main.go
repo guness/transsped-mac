@@ -37,7 +37,7 @@ func (s stdinOTP) Collect(pinPrompt, otpPrompt string) (string, string, bool, er
 }
 
 func main() {
-	bits := flag.Int("sha", 384, "hash size to test: 256, 384, or 512")
+	bits := flag.Int("sha", 256, "hash size to test: 256, 384, or 512 (cloud signs 256/512; 384 is rejected)")
 	flag.Parse()
 
 	cfg, leaf, _, err := config.Load()

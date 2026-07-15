@@ -4,6 +4,14 @@
 **Status:** Approved for planning (Approach A, Firefox-login-only scope)
 **Author:** reverse-engineering + design session
 
+> **Update (2026-07-16) — shipped design differs on two points.** Real logins go
+> through ANAF's **F5 BIG-IP APM** portal (`app.anaf.ro`), which requests the cert
+> via TLS **renegotiation** and offers `rsa_pkcs1_sha256` — so there is **no
+> TLS-1.2 pin and no dedicated Firefox profile**; the module registers into the
+> normal profile and collects PIN+OTP at sign time. Delivery is the notarized
+> `TransSped.app`. The CSC API findings below remain accurate. See the
+> [README](../../README.md) and [RUNBOOK](../RUNBOOK.md) for the current design.
+
 ---
 
 ## 1. Goal & scope

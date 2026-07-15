@@ -52,8 +52,8 @@ func (b *Backend) GetInfo() (pkcs11.Info, error) {
 	// CryptokiVersion/LibraryVersion must be non-zero: NSS (modutil/Firefox)
 	// validates CK_INFO.cryptokiVersion when adding a module and silently
 	// rejects one reporting 0.0 as unsupported/invalid, even though the
-	// module otherwise loads and responds correctly. Discovered via the
-	// Firefox/NSS load validation in scripts/firefox-setup.md.
+	// module otherwise loads and responds correctly. Discovered during
+	// Firefox/NSS module-load validation.
 	return pkcs11.Info{
 		CryptokiVersion:    pkcs11.Version{Major: 2, Minor: 20},
 		ManufacturerID:     "Trans Sped",

@@ -23,7 +23,7 @@ type Prompter interface {
 type OSAScript struct{}
 
 func (OSAScript) OTP(prompt string) (string, error) {
-	return dialog("ANAF login — Trans Sped OTP", prompt, false)
+	return dialog("ANAF login — Trans Sped OTP", prompt)
 }
 
 // Collect shows a single dialog with a PIN field, an OTP field, and a
@@ -73,13 +73,9 @@ func (OSAScript) pinWithRemember(prompt string) (string, bool, error) {
 	return parts[0], remember, nil
 }
 
-func dialog(title, prompt string, hidden bool) (string, error) {
-	hid := ""
-	if hidden {
-		hid = "with hidden answer "
-	}
+func dialog(title, prompt string) (string, error) {
 	script := `display dialog "` + escape(prompt) + `" default answer "" with title "` +
-		escape(title) + `" ` + hid + `buttons {"Cancel","OK"} default button "OK"`
+		escape(title) + `" buttons {"Cancel","OK"} default button "OK"`
 	out, err := exec.Command("osascript", "-e", script, "-e", `text returned of result`).Output()
 	if err != nil {
 		return "", err
