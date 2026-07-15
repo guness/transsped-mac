@@ -112,3 +112,38 @@ Nothing further to do — the `tscloud-firefox` profile keeps the module
 loaded and the TLS pin persists across launches. Re-run `./scripts/build.sh`
 + `./scripts/setup-firefox.sh` only if you rebuild the dylib (e.g. after a
 code change) or need to reload the module.
+
+---
+
+## ✅ CONFIRMED WORKING FLOW (2026-07-15)
+
+Verified end-to-end: a Trans Sped **cloud** qualified cert logging into ANAF SPV
+on macOS Firefox, reproducibly.
+
+**How the login actually works:**
+1. Launch the dedicated profile:
+   `/Applications/Firefox.app/Contents/MacOS/firefox -profile "$HOME/.tscloud-firefox" -no-remote`
+2. Start the ANAF login and choose the **certificate** method. Depending on the
+   entry point this lands on either the OAuth flow (`logincert.anaf.ro`) or the
+   **F5 BIG-IP APM** flow (`app.anaf.ro/my.policy`). The F5 APM certificate
+   option is the confirmed-working path.
+3. Pick the **Trans Sped Cloud** cert. Our module then pops a **PIN dialog**
+   (signature password) and an **OTP dialog** — enter both (OTP from the Trans
+   Sped app or email). This happens **once per client-cert TLS handshake**
+   (SCAL=2), so a full login may prompt more than once.
+4. The F5 APM policy completes and the SPV dashboard loads.
+
+**Why the module is configured "not login required":** ANAF's F5 APM requests
+the cert via TLS **renegotiation**, during which NSS never performs a
+`C_Login`/PIN prompt. A login-required token therefore can't expose its key and
+NSS sends an empty certificate (the original infinite-OTP loop). Reporting the
+token as not-login-required + `CKA_PRIVATE=false` lets NSS present the cert
+during renegotiation; the module collects PIN+OTP itself at sign time.
+
+**Known trade-offs / follow-ups:**
+- Because the token is not login-required, NSS may offer the cert on more ANAF
+  connections, adding cloud round-trips (slower browsing). Tunable later.
+- The OAuth portal (`login.anaf.ro`) may negotiate SHA-384, which the msign
+  cloud cannot sign; the F5 APM portal (SHA-256) is the working path.
+- Debug: `touch ~/.config/tscloud/DEBUG` → logs to `~/.config/tscloud/pkcs11-debug.log`
+  (visible for `pkcs11-tool`/CLI; Firefox's sandbox blocks it).
