@@ -1,8 +1,9 @@
 // Command tscloud-diag exercises the exact CSC signing path the PKCS#11 module
 // uses (csc.Signer.SignDigestInfo), against the REAL cloud, for a chosen hash
-// size — so we can validate the SHA-384 raw-signing fix without going through
-// Firefox or pkcs11-tool. It prompts for the signature PIN and an OTP, signs a
-// test digest, and verifies the result against the certificate's public key.
+// size — so we can validate signing without going through Firefox or
+// pkcs11-tool. It prompts for the signature PIN and an OTP, signs a test
+// digest, and verifies the result against the certificate's public key.
+// (The cloud signs SHA-256/512; SHA-384 is rejected server-side.)
 package main
 
 import (
@@ -22,16 +23,17 @@ import (
 
 type stdinOTP struct{ r *bufio.Reader }
 
-func (s stdinOTP) PIN(prompt string) (string, error) {
-	fmt.Fprint(os.Stderr, "\n"+prompt+"\nPIN: ")
-	line, _ := s.r.ReadString('\n')
-	return strings.TrimSpace(line), nil
-}
-
 func (s stdinOTP) OTP(prompt string) (string, error) {
 	fmt.Fprint(os.Stderr, "\n"+prompt+"\nOTP: ")
 	line, _ := s.r.ReadString('\n')
 	return strings.TrimSpace(line), nil
+}
+
+func (s stdinOTP) Collect(pinPrompt, otpPrompt string) (string, string, bool, error) {
+	fmt.Fprint(os.Stderr, "\n"+pinPrompt+"\nPIN: ")
+	pl, _ := s.r.ReadString('\n')
+	otp, _ := s.OTP(otpPrompt)
+	return strings.TrimSpace(pl), otp, false, nil
 }
 
 func main() {
@@ -76,7 +78,7 @@ func main() {
 	signer := &csc.Signer{Client: c, CredentialID: cfg.CredentialID, PIN: func() string { return pin }, OTP: stdinOTP{r: r}, Debug: true}
 
 	fmt.Fprintf(os.Stderr, "Signing a %d-byte SHA-%d digest via the module's signing path...\n", len(digest), *bits)
-	sig, err := signer.SignDigestInfo(digest) // bare digest -> ParseHashInput -> (raw fix for 384)
+	sig, err := signer.SignDigestInfo(digest) // bare digest -> ParseHashInput -> cloud sign
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "\nSIGN FAILED:", err)
 		os.Exit(1)

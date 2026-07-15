@@ -63,7 +63,12 @@ func init() {
 	if v := os.Getenv("TSCLOUD_OTP"); v != "" {
 		prompter = otp.Static{OTPValue: v, PINValue: os.Getenv("TSCLOUD_PIN")}
 	}
-	signer := &csc.Signer{Client: csc.New(cfg.BaseURL), CredentialID: cfg.CredentialID, OTP: prompter}
+	signer := &csc.Signer{
+		Client:       csc.New(cfg.BaseURL),
+		CredentialID: cfg.CredentialID,
+		OTP:          prompter,
+		Store:        otp.Keychain{Service: config.KeychainService, Account: cfg.CredentialID},
+	}
 	if setupDebug() {
 		signer.Debug = true
 		signer.Client.Debug = true

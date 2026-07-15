@@ -34,9 +34,12 @@ Open your **normal** Firefox, then:
    option is the confirmed-working path.**
 3. Firefox shows a certificate picker — select the **Trans Sped Cloud**
    certificate.
-4. The module pops a **PIN dialog** (your Trans Sped signature PIN/password,
-   not your ANAF portal password) and then an **OTP dialog** — enter both (OTP
-   from the Trans Sped app or email).
+4. The module pops **one dialog** with a **PIN** field (your Trans Sped
+   signature PIN/password, not your ANAF portal password), an **OTP** field
+   (from the Trans Sped app or email), and a **"Remember PIN"** checkbox. Fill
+   it in and click OK. If you tick "Remember PIN", later logins ask only for
+   the OTP. *(If the combined dialog can't render, it falls back to two
+   sequential dialogs — a PIN prompt with a "Remember & OK" button, then OTP.)*
 5. Expect the SPV dashboard to load within a few seconds of approving the OTP.
 
 ## Step 3 — Measure the OTP count
@@ -61,7 +64,8 @@ entering the OTP, note the approximate delay before it gave up.
 | Handshake fails or times out | Approve the PIN/OTP dialogs promptly — the TLS handshake is waiting on them. To confirm what was negotiated, capture the session: `SSLKEYLOGFILE=/tmp/ff.keys open -a Firefox`, reproduce the login, then open the capture in Wireshark (set `tls.keylog_file` to `/tmp/ff.keys` under Preferences → Protocols → TLS) and confirm the handshake used **TLS 1.2** and signature scheme **rsa_pkcs1_sha256**. |
 | Module not listed in Firefox at all | Confirm `pkcs11.txt` in your default profile contains a `name=TransSpedCloud` line. Re-run the app (with Firefox quit) to re-register. To find your default profile: it's the `[Install…] Default` (or `Default=1`) entry in `~/Library/Application Support/Firefox/profiles.ini`. |
 | `TransSped.app` reports "no cloud credential found" | Your certificate may be a **mobile-eIDAS** credential rather than a standard qualified cert — those live on a different backend (`https://services.cloudsignature.online/csc/v1/` with OAuth2), which this tool does not support (it targets `https://msign.transsped.ro/csc/v0/local/` only). Confirm with whoever issued your Trans Sped credential which backend it's on. |
-| PIN rejected / OTP rejected | Confirm you're entering your **Trans Sped signature PIN/password** (not your ANAF portal password), and that the OTP is the current one from the Trans Sped app or SMS (they expire quickly — start a fresh login attempt if it lapses). |
+| PIN rejected / OTP rejected | Confirm you're entering your **Trans Sped signature PIN/password** (not your ANAF portal password), and that the OTP is the current one from the Trans Sped app or SMS (they expire quickly — start a fresh login attempt if it lapses). A *remembered* PIN that fails is forgotten automatically, so the next login will prompt for it again. |
+| Remembered PIN keeps re-appearing / want to clear it | Run `open "TransSped.app" --args -uninstall` (clears it), or remove it directly: `security delete-generic-password -s ro.transsped.macos`. |
 
 ## Uninstall / reset
 

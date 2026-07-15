@@ -77,10 +77,13 @@ Open your normal Firefox, then:
 
 ## How it works
 
-- **PIN + OTP per login.** ANAF's F5 APM requests the client cert via TLS
-  renegotiation, during which NSS never performs `C_Login` — so the module
-  collects **both PIN and OTP itself, at signing time** (native `osascript`
-  dialogs), mirroring the single PIN+OTP prompt of the Windows KSP.
+- **One PIN + OTP dialog per login.** ANAF's F5 APM requests the client cert
+  via TLS renegotiation, during which NSS never performs `C_Login` — so the
+  module collects the secrets **itself, at signing time**, in a single native
+  dialog with a PIN field, an OTP field, and a **"Remember PIN"** checkbox
+  (mirroring the Windows KSP's one prompt). Tick "Remember PIN" and the PIN is
+  saved to your macOS login **Keychain**, so later logins ask only for the OTP.
+  A remembered PIN that stops working is forgotten automatically.
 - **~1 OTP per login.** Your account has `SCAL = 2` — each signing
   authorization (SAD) is OTP-bound to one specific hash. A normal SPV login
   performs one client-cert handshake, so it costs one OTP, matching the
@@ -169,9 +172,16 @@ None of the above touch your real Trans Sped account or `~/.config/tscloud`.
 
 ## Security
 
-- The Trans Sped **signature PIN** and **OTP** are each collected per login
-  via a native `osascript` dialog and used only to authorize that one
-  signature — never written to disk or logged.
+- The **OTP** is single-use and collected per login via a native dialog —
+  never stored or logged.
+- The **signature PIN** is used only to authorize a signature. If you tick
+  **"Remember PIN"**, it is stored in the macOS login **Keychain** (encrypted
+  at rest, keyed to your credential ID under service `ro.transsped.macos`) via
+  the `security` tool — never in a plaintext file. If you don't, it is
+  discarded after the login. Uninstalling (`-uninstall`) removes it. *(Caveat:
+  the Keychain item is saved with `-A` so the module can read it without a
+  per-process prompt, and the PIN is briefly visible in `security`'s process
+  arguments while being saved — acceptable on a single-user Mac.)*
 - `~/.config/tscloud/` holds only your **public** certificate chain
   (`leaf.der`, `intermediate*.der`) and non-secret identifiers
   (`config.json`: base URL, user ID, credential ID, label). No private key
