@@ -27,6 +27,13 @@ rm -f "$DMG"
 hdiutil create -volname "$VOL" -srcfolder "$STAGING" -ov -format UDZO "$DMG" >/dev/null
 rm -rf "$STAGING"
 
+# Code-sign the DMG itself when a Developer ID is available (must happen before
+# notarization — signing after would invalidate the stapled ticket).
+if [ -n "${SIGN_ID:-}" ]; then
+  echo "==> signing $DMG"
+  codesign --force --timestamp -s "$SIGN_ID" "$DMG"
+fi
+
 if [ -n "${AC_PROFILE:-}" ]; then
   echo "==> notarizing (keychain profile: $AC_PROFILE)"
   xcrun notarytool submit "$DMG" --keychain-profile "$AC_PROFILE" --wait
