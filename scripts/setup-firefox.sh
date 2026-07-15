@@ -63,6 +63,7 @@ if ! grep -q 'security.tls.version.min' "$PROFILE_DIR/user.js" 2>/dev/null; then
   cat >> "$PROFILE_DIR/user.js" <<'EOF'
 user_pref("security.tls.version.min", 3);
 user_pref("security.tls.version.max", 3);
+user_pref("security.osclientcerts.autoload", false);
 EOF
 fi
 
