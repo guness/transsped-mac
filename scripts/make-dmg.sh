@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Wraps a built "EasySign for Mac.app" into a distributable DMG (with an
+# Wraps a built "TransSped.app" into a distributable DMG (with an
 # Applications drop-target), and optionally notarizes + staples it.
 #
 #   ./scripts/build-app.sh          # build the .app first (SIGN_ID for a Developer ID build)
-#   ./scripts/make-dmg.sh           # -> EasySign-for-Mac.dmg
+#   ./scripts/make-dmg.sh           # -> TransSped.dmg
 #   AC_PROFILE=<profile> ./scripts/make-dmg.sh   # also notarize + staple
 #
 # Notarization requires a Developer ID-signed, hardened-runtime app (build with
@@ -11,9 +11,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-APP="EasySign for Mac.app"
-DMG="EasySign-for-Mac.dmg"
-VOL="EasySign for Mac"
+APP="TransSped.app"
+DMG="TransSped.dmg"
+VOL="TransSped"
 
 [ -d "$APP" ] || { echo "error: '$APP' not found — run ./scripts/build-app.sh first" >&2; exit 1; }
 
