@@ -5,9 +5,7 @@
 package main
 
 import (
-	"io"
 	"log"
-	"log/syslog"
 	"os"
 	"path/filepath"
 
@@ -20,32 +18,22 @@ import (
 )
 
 // setupDebug enables verbose logging when a sentinel file `DEBUG` exists in the
-// config dir. This is deliberately NOT gated on an env var: Firefox loads and
+// config dir. It is deliberately NOT gated on an env var: Firefox loads and
 // drives PKCS#11 modules for TLS inside a sandboxed child process that strips
 // env vars and redirects stderr, so neither an env flag nor stderr logging is
-// observable. Instead we redirect the standard logger to a file in the config
-// dir (which the module already has read access to) and flip the package Debug
-// flags. Returns true if debug was enabled.
+// observable there. We route the standard logger to a file in the config dir
+// instead. NOTE: Firefox's sandbox also blocks writes to that file, so this
+// only surfaces logs for non-sandboxed hosts (e.g. pkcs11-tool); for Firefox,
+// capture the TLS session instead (see docs/RUNBOOK.md). Returns true if
+// debug was enabled.
 func setupDebug() bool {
 	dir := config.Dir()
 	if _, err := os.Stat(filepath.Join(dir, "DEBUG")); err != nil {
 		return false
 	}
-	// Route logs to BOTH a file and the system log (syslog). Firefox's
-	// sandboxed TLS process cannot write our config dir, but sandboxes
-	// generally still permit the syslog socket — so syslog is how we observe
-	// signing inside Firefox (read with: log show --predicate 'eventMessage
-	// CONTAINS "tscloud"' --last 10m).
-	var ws []io.Writer
 	if f, err := os.OpenFile(filepath.Join(dir, "pkcs11-debug.log"),
 		os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
-		ws = append(ws, f)
-	}
-	if sw, err := syslog.New(syslog.LOG_NOTICE|syslog.LOG_USER, "tscloud-pkcs11"); err == nil {
-		ws = append(ws, sw)
-	}
-	if len(ws) > 0 {
-		log.SetOutput(io.MultiWriter(ws...))
+		log.SetOutput(f)
 	}
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 	token.Debug = true

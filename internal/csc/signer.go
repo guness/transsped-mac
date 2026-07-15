@@ -28,21 +28,14 @@ func (s *Signer) SignDigestInfo(data []byte) ([]byte, error) {
 		}
 		return nil, err
 	}
-	// The msign cloud accepts sha256WithRSA / sha512WithRSA / sha1WithRSA, but
-	// REJECTS sha384WithRSA ("Invalid parameter signAlgo"). ANAF's login.anaf.ro
-	// handshake requests rsa_pkcs1_sha384, so for SHA-384 we build the DigestInfo
-	// ourselves and sign it with the raw rsaEncryption primitive, which yields an
-	// identical, valid rsa_pkcs1_sha384 signature.
-	payload := digest
-	if signAlgo == oidSHA384WithRSA {
-		payload = append(append([]byte{}, sha384DigestInfoPrefix...), digest...)
-		signAlgo = oidRSAEncryptionRaw
-		hashAlgo = oidRawHashAlgo
-	}
+	// The msign cloud signs sha256WithRSA / sha512WithRSA / sha1WithRSA. The
+	// working ANAF path is the F5 APM portal (app.anaf.ro), which requests
+	// rsa_pkcs1_sha256 — well within that set. (The cloud rejects sha384WithRSA
+	// outright, so ANAF's other, OAuth portal is unsupported here.)
 	if s.Debug {
-		log.Printf("[tscloud] sign: C_Sign input=%d bytes -> digest=%d bytes, payload=%d bytes, signAlgo=%s hashAlgo=%s", len(data), len(digest), len(payload), signAlgo, hashAlgo)
+		log.Printf("[tscloud] sign: C_Sign input=%d bytes -> digest=%d bytes, signAlgo=%s hashAlgo=%s", len(data), len(digest), signAlgo, hashAlgo)
 	}
-	hb := base64.StdEncoding.EncodeToString(payload)
+	hb := base64.StdEncoding.EncodeToString(digest)
 	if err := s.Client.SendOTP(s.CredentialID); err != nil {
 		return nil, err
 	}
