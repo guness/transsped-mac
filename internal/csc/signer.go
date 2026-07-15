@@ -5,16 +5,26 @@ import (
 	"log"
 )
 
+// OTPPrompter collects the PIN and OTP from the user at signing time.
 type OTPPrompter interface {
-	PIN(prompt string) (string, error)
 	OTP(prompt string) (string, error)
+	Collect(pinPrompt, otpPrompt string) (pin, otp string, remember bool, err error)
+}
+
+// PINStore optionally persists a remembered signature PIN (e.g. the macOS
+// Keychain). A nil store simply means "never remember".
+type PINStore interface {
+	Load() (string, bool)
+	Save(pin string) error
+	Delete() error
 }
 
 type Signer struct {
 	Client       *Client
 	CredentialID string
-	PIN          func() string
+	PIN          func() string // NSS-cached PIN (OAuth C_Login path); usually nil/empty
 	OTP          OTPPrompter
+	Store        PINStore // optional; when set, honours the "remember PIN" checkbox
 	Debug        bool
 }
 
@@ -39,25 +49,47 @@ func (s *Signer) SignDigestInfo(data []byte) ([]byte, error) {
 	if err := s.Client.SendOTP(s.CredentialID); err != nil {
 		return nil, err
 	}
-	// PIN: use the one NSS cached via C_Login if present (the OAuth path); on the
-	// F5 APM renegotiation path NSS never logs in, so collect it here — mirroring
-	// the Windows KSP's PIN+OTP dialog.
+
+	// Resolve the PIN. Priority: NSS-cached (OAuth C_Login) > remembered
+	// (Keychain) > prompt. When we have to prompt, ask for PIN+OTP together and
+	// honour the "remember" checkbox; otherwise only the OTP is needed.
 	pin := ""
 	if s.PIN != nil {
 		pin = s.PIN()
 	}
-	if pin == "" {
-		pin, err = s.OTP.PIN("Enter your Trans Sped signature PIN (password):")
+	usedRemembered := false
+	if pin == "" && s.Store != nil {
+		if p, ok := s.Store.Load(); ok {
+			pin, usedRemembered = p, true
+		}
+	}
+
+	var otp string
+	if pin != "" {
+		if otp, err = s.OTP.OTP("Enter the OTP from your Trans Sped app/email to authorise the ANAF login:"); err != nil {
+			return nil, err
+		}
+	} else {
+		var remember bool
+		pin, otp, remember, err = s.OTP.Collect(
+			"Signature PIN (password)",
+			"One-time code (OTP)")
 		if err != nil {
 			return nil, err
 		}
+		if remember && pin != "" && s.Store != nil {
+			_ = s.Store.Save(pin)
+		}
 	}
-	otp, err := s.OTP.OTP("Enter the OTP from your Trans Sped app/email to authorise the ANAF login:")
-	if err != nil {
-		return nil, err
-	}
+
 	sad, err := s.Client.Authorize(s.CredentialID, pin, otp, hb)
 	if err != nil {
+		// A remembered PIN that fails to authorise is probably stale (changed or
+		// mistyped when saved) — forget it so the next login prompts afresh
+		// rather than failing forever.
+		if usedRemembered && s.Store != nil {
+			_ = s.Store.Delete()
+		}
 		return nil, err
 	}
 	sig64, err := s.Client.SignHash(s.CredentialID, sad, hb, signAlgo, hashAlgo)

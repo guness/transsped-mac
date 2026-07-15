@@ -111,6 +111,11 @@ func runUninstall(gui bool) {
 		notes = append(notes, "No Firefox profile found to update.")
 	}
 
+	// Remove any remembered PIN from the Keychain (best effort).
+	if exec.Command("security", "delete-generic-password", "-s", config.KeychainService).Run() == nil {
+		notes = append(notes, "Removed the remembered PIN from the Keychain.")
+	}
+
 	dir := config.Dir()
 	if _, err := os.Stat(dir); err == nil {
 		fail(gui, os.RemoveAll(dir))

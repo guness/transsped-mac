@@ -15,6 +15,11 @@ type Config struct {
 	Label        string `json:"label"`
 }
 
+// KeychainService is the macOS Keychain service name under which a remembered
+// signature PIN is stored (account = credential ID). Shared by the module (read
+// at sign time) and the setup app's uninstall (delete).
+const KeychainService = "ro.transsped.macos"
+
 func Dir() string {
 	if d := os.Getenv("TSCLOUD_DIR"); d != "" {
 		return d

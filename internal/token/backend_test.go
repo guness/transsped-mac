@@ -66,8 +66,10 @@ func TestNewBackend_EmptyNoPanic(t *testing.T) {
 
 type fixedOTP struct{}
 
-func (fixedOTP) PIN(string) (string, error) { return "1234", nil }
 func (fixedOTP) OTP(string) (string, error) { return "111111", nil }
+func (fixedOTP) Collect(string, string) (string, string, bool, error) {
+	return "1234", "111111", false, nil
+}
 
 // TestBackend_FindAndSign drives the Backend through the full
 // find-private-key -> sign flow, with the CSC HTTP calls (sendOTP, authorize,
