@@ -12,6 +12,7 @@ import (
 
 type fakeOTP struct{}
 
+func (fakeOTP) PIN(string) (string, error) { return "1234", nil }
 func (fakeOTP) OTP(string) (string, error) { return "999000", nil }
 
 func TestSigner_SignDigestInfo(t *testing.T) {

@@ -5,8 +5,11 @@
 package main
 
 import (
+	"io"
 	"log"
+	"log/syslog"
 	"os"
+	"path/filepath"
 
 	"tscloud/internal/config"
 	"tscloud/internal/csc"
@@ -15,6 +18,39 @@ import (
 
 	"github.com/namecoin/pkcs11mod"
 )
+
+// setupDebug enables verbose logging when a sentinel file `DEBUG` exists in the
+// config dir. This is deliberately NOT gated on an env var: Firefox loads and
+// drives PKCS#11 modules for TLS inside a sandboxed child process that strips
+// env vars and redirects stderr, so neither an env flag nor stderr logging is
+// observable. Instead we redirect the standard logger to a file in the config
+// dir (which the module already has read access to) and flip the package Debug
+// flags. Returns true if debug was enabled.
+func setupDebug() bool {
+	dir := config.Dir()
+	if _, err := os.Stat(filepath.Join(dir, "DEBUG")); err != nil {
+		return false
+	}
+	// Route logs to BOTH a file and the system log (syslog). Firefox's
+	// sandboxed TLS process cannot write our config dir, but sandboxes
+	// generally still permit the syslog socket — so syslog is how we observe
+	// signing inside Firefox (read with: log show --predicate 'eventMessage
+	// CONTAINS "tscloud"' --last 10m).
+	var ws []io.Writer
+	if f, err := os.OpenFile(filepath.Join(dir, "pkcs11-debug.log"),
+		os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600); err == nil {
+		ws = append(ws, f)
+	}
+	if sw, err := syslog.New(syslog.LOG_NOTICE|syslog.LOG_USER, "tscloud-pkcs11"); err == nil {
+		ws = append(ws, sw)
+	}
+	if len(ws) > 0 {
+		log.SetOutput(io.MultiWriter(ws...))
+	}
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+	token.Debug = true
+	return true
+}
 
 func init() {
 	cfg, leaf, inter, err := config.Load()
@@ -32,14 +68,19 @@ func init() {
 		pkcs11mod.SetBackend(token.NewBackend(nil, &csc.Signer{}))
 		return
 	}
-	// Headless OTP override for automated/CI testing: when TSCLOUD_OTP is set,
-	// use it as a static OTP instead of popping the interactive osascript
-	// dialog. Unset (the default, real-user path) is unchanged.
+	// Headless override for automated/CI testing: when TSCLOUD_OTP is set, use
+	// static PIN/OTP instead of popping the interactive osascript dialogs. Unset
+	// (the default, real-user path) is unchanged.
 	var prompter otp.Prompter = otp.OSAScript{}
 	if v := os.Getenv("TSCLOUD_OTP"); v != "" {
-		prompter = otp.Static{Value: v}
+		prompter = otp.Static{OTPValue: v, PINValue: os.Getenv("TSCLOUD_PIN")}
 	}
 	signer := &csc.Signer{Client: csc.New(cfg.BaseURL), CredentialID: cfg.CredentialID, OTP: prompter}
+	if setupDebug() {
+		signer.Debug = true
+		signer.Client.Debug = true
+		log.Printf("[tscloud] module init (pid=%d): debug on, cred=%s base=%s", os.Getpid(), cfg.CredentialID, cfg.BaseURL)
+	}
 	pkcs11mod.SetBackend(token.NewBackend(token.BuildObjects(leaf, inter), signer))
 }
 

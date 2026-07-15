@@ -66,6 +66,7 @@ func TestNewBackend_EmptyNoPanic(t *testing.T) {
 
 type fixedOTP struct{}
 
+func (fixedOTP) PIN(string) (string, error) { return "1234", nil }
 func (fixedOTP) OTP(string) (string, error) { return "111111", nil }
 
 // TestBackend_FindAndSign drives the Backend through the full

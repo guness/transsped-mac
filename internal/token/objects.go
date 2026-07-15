@@ -76,7 +76,7 @@ func BuildObjects(leaf *x509.Certificate, inter []*x509.Certificate) []*Object {
 			pkcs11.CKA_CLASS:           b(pkcs11.CKO_PRIVATE_KEY),
 			pkcs11.CKA_KEY_TYPE:        b(pkcs11.CKK_RSA),
 			pkcs11.CKA_TOKEN:           {1},
-			pkcs11.CKA_PRIVATE:         {1},
+			pkcs11.CKA_PRIVATE:         {0}, // token not login-required; key must be usable in a public session so NSS presents the cert during F5 renegotiation
 			pkcs11.CKA_SIGN:            {1},
 			pkcs11.CKA_ID:              id,
 			pkcs11.CKA_LABEL:           []byte("Trans Sped Cloud"),

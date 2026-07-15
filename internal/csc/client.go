@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,6 +16,9 @@ import (
 type Client struct {
 	BaseURL string
 	HTTP    *http.Client
+	// Debug, when true, logs each request path + response status/body + timing
+	// to stderr. Response bodies only (never request bodies, which carry PIN/OTP).
+	Debug bool
 }
 
 func New(baseURL string) *Client {
@@ -26,12 +30,23 @@ func New(baseURL string) *Client {
 
 func (c *Client) post(path string, req any, out any) error {
 	buf, _ := json.Marshal(req)
+	start := time.Now()
 	resp, err := c.HTTP.Post(c.BaseURL+path, "application/json", bytes.NewReader(buf))
 	if err != nil {
+		if c.Debug {
+			log.Printf("[tscloud] csc %s: transport error after %s: %v", path, time.Since(start), err)
+		}
 		return err
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
+	if c.Debug {
+		b := string(body)
+		if len(b) > 400 {
+			b = b[:400] + "…"
+		}
+		log.Printf("[tscloud] csc %s -> HTTP %d in %s: %s", path, resp.StatusCode, time.Since(start), b)
+	}
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("%s: HTTP %d: %s", path, resp.StatusCode, string(body))
 	}

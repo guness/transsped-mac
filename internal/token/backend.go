@@ -1,12 +1,27 @@
 package token
 
 import (
+	"log"
+	"os"
+	"sync/atomic"
+	"time"
+
 	"tscloud/internal/csc"
 
 	"github.com/miekg/pkcs11"
 )
 
 const slotID = 0
+
+// Debug, when true, makes Sign log each call (count, timing, PID, outcome) via
+// the standard logger. It is set at module init from a sentinel file (see
+// cmd/pkcs11) because Firefox strips env vars from its sandboxed child process.
+var Debug bool
+
+// signCallCount tracks how many C_Sign calls the module has served, so debug
+// logs reveal whether a single login triggers one signature (expected) or more
+// (SCAL=2 multi-connection → multiple OTPs).
+var signCallCount atomic.Int64
 
 // Backend implements pkcs11mod.Backend, exposing a single Trans Sped Cloud
 // signing credential (leaf certificate + private key + intermediates) as an
@@ -51,8 +66,14 @@ func (b *Backend) GetSlotInfo(uint) (pkcs11.SlotInfo, error) {
 	return pkcs11.SlotInfo{SlotDescription: "TS Cloud", Flags: pkcs11.CKF_TOKEN_PRESENT}, nil
 }
 func (b *Backend) GetTokenInfo(uint) (pkcs11.TokenInfo, error) {
+	// NOT login-required: ANAF's F5 BIG-IP APM requests the client cert via TLS
+	// renegotiation, during which NSS never does a C_Login — so a login-required
+	// token can't expose its key and NSS sends an EMPTY certificate. Reporting
+	// no login requirement (with a non-private key object, see objects.go) lets
+	// NSS present the cert during renegotiation; the PIN + OTP are collected by
+	// the module at C_Sign time, mirroring the Windows KSP's PIN+OTP dialog.
 	return pkcs11.TokenInfo{Label: "Trans Sped Cloud", ManufacturerID: "Trans Sped",
-		Flags: pkcs11.CKF_TOKEN_INITIALIZED | pkcs11.CKF_LOGIN_REQUIRED | pkcs11.CKF_USER_PIN_INITIALIZED}, nil
+		Flags: pkcs11.CKF_TOKEN_INITIALIZED}, nil
 }
 func (b *Backend) GetMechanismList(uint) ([]*pkcs11.Mechanism, error) {
 	return []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_RSA_PKCS, nil)}, nil
@@ -121,9 +142,22 @@ func (b *Backend) Sign(_ pkcs11.SessionHandle, data []byte) ([]byte, error) {
 	if b.signer == nil || b.signer.Client == nil {
 		return nil, ckErr(pkcs11.CKR_FUNCTION_FAILED)
 	}
+	n := signCallCount.Add(1)
+	start := time.Now()
+	if Debug {
+		log.Printf("[tscloud] C_Sign #%d begin (pid=%d): %d input bytes", n, os.Getpid(), len(data))
+	}
 	sig, err := b.signer.SignDigestInfo(data)
 	if err != nil {
+		// The detailed CSC error is otherwise swallowed into a generic
+		// CKR_FUNCTION_FAILED; surface it under Debug for diagnosis.
+		if Debug {
+			log.Printf("[tscloud] C_Sign #%d FAILED after %s (pid=%d): %v", n, time.Since(start), os.Getpid(), err)
+		}
 		return nil, ckErr(pkcs11.CKR_FUNCTION_FAILED)
+	}
+	if Debug {
+		log.Printf("[tscloud] C_Sign #%d OK after %s (pid=%d): %d signature bytes", n, time.Since(start), os.Getpid(), len(sig))
 	}
 	return sig, nil
 }
