@@ -27,7 +27,7 @@ needs your real Trans Sped account and a live OTP.
 
 Open your **normal** Firefox, then:
 
-1. Navigate to your ANAF SPV login (e.g. `https://pfinternet.anaf.ro`).
+1. Navigate to `https://www.anaf.ro/` and start the certificate login (or use the app's **Open ANAF login** button).
 2. Choose the **certificate** authentication method. Depending on the entry
    point this lands on either the OAuth flow (`logincert.anaf.ro`) or the
    **F5 BIG-IP APM** flow (`app.anaf.ro/my.policy`). **The F5 APM certificate

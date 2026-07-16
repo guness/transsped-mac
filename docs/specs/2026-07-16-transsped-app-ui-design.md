@@ -99,7 +99,7 @@ prompt. On success the window switches to the set-up state.
   - **Account** — the userID.
   - **Certificate valid until** — `certNotAfter` formatted for the locale; turns amber if within 30 days, red if past.
   - ⚠️ **Firefox is open** row — shown only when `firefoxRunning` and an action needs it closed.
-- **Buttons:** **Update** (re-run setup with the saved userID) · **Open ANAF login** (`open -a Firefox https://pfinternet.anaf.ro`) · **Uninstall** (confirmation, then engine uninstall).
+- **Buttons:** **Update** (re-run setup with the saved userID) · **Open ANAF login** (`open -a Firefox https://www.anaf.ro/`) · **Uninstall** (confirmation, then engine uninstall).
 - **About** (sheet): one-line description; "Signing is delegated to the Trans Sped cloud — no private key is ever stored on this Mac."; version; GitHub link (`github.com/guness/transsped-mac`); license.
 
 **Feedback:** a spinner + status line while the engine runs (setup has cloud

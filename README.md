@@ -62,7 +62,7 @@ Settings → Privacy & Security → **Security Devices** → **Unload**.
 
 Open your normal Firefox, then:
 
-1. Go to your ANAF SPV login (e.g. `https://pfinternet.anaf.ro`).
+1. Go to `https://www.anaf.ro/` and start the certificate login (or use the app's **Open ANAF login** button).
 2. Choose the **certificate** authentication method.
 3. Pick the **Trans Sped Cloud** certificate from the picker.
 4. Enter your **PIN** and then the **OTP** in the native macOS dialogs (OTP

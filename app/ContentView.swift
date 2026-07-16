@@ -186,7 +186,7 @@ struct ContentView: View {
     }
 
     private func openANAF() {
-        let url = URL(string: "https://pfinternet.anaf.ro")!
+        let url = URL(string: "https://www.anaf.ro/")!
         let firefox = URL(fileURLWithPath: "/Applications/Firefox.app")
         NSWorkspace.shared.open([url], withApplicationAt: firefox,
                                 configuration: NSWorkspace.OpenConfiguration()) { _, _ in }

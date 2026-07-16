@@ -47,7 +47,8 @@ struct Callout: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: icon).foregroundStyle(tint)
             Text(text)
-            Spacer(minLength: 0)
+                .fixedSize(horizontal: false, vertical: true) // wrap, don't truncate
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.callout)
         .padding(10)
