@@ -32,17 +32,29 @@ enum Engine {
 
     private static func run(_ args: [String]) async -> Data? {
         guard let bin = binaryURL() else { return nil }
+        let p = Process()
+        p.executableURL = bin
+        p.arguments = args
+        let out = Pipe()
+        let err = Pipe()
+        p.standardOutput = out
+        p.standardError = err
         return await withCheckedContinuation { cont in
-            let p = Process()
-            p.executableURL = bin
-            p.arguments = args
-            let out = Pipe()
-            p.standardOutput = out
-            p.standardError = Pipe()
-            p.terminationHandler = { _ in
-                cont.resume(returning: out.fileHandleForReading.readDataToEndOfFile())
+            do {
+                try p.run()
+            } catch {
+                cont.resume(returning: nil)
+                return
             }
-            do { try p.run() } catch { cont.resume(returning: nil) }
+            // Drain both pipes on a background queue: readDataToEndOfFile reads
+            // continuously until the child closes the pipe on exit, so a payload
+            // larger than the kernel pipe buffer cannot stall the child (the
+            // deadlock you'd get by reading only from terminationHandler).
+            DispatchQueue.global().async {
+                let data = out.fileHandleForReading.readDataToEndOfFile()
+                _ = err.fileHandleForReading.readDataToEndOfFile()
+                cont.resume(returning: data)
+            }
         }
     }
 
