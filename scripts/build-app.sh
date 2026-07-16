@@ -1,24 +1,18 @@
 #!/usr/bin/env bash
-# Builds "TransSped.app" — a double-clickable setup app that fetches the
-# Trans Sped cloud cert and registers the PKCS#11 module into the user's normal
-# Firefox profile (no dedicated profile, no TLS pin, no disabling of existing
-# certs). Run once; then use Firefox as usual for ANAF.
+# Builds "TransSped.app" — a native SwiftUI window (Contents/MacOS/TransSped)
+# driving the headless Go engine (Contents/Resources/tscloud-engine) and the
+# PKCS#11 module (Contents/Resources/libtscloud-pkcs11.dylib).
 #
-# Signing:
-#   ad-hoc by default (fine for running locally on this Mac).
-#   Set SIGN_ID to a "Developer ID Application: …" identity to produce a
-#   hardened-runtime, timestamped build suitable for notarization + sharing:
-#     SIGN_ID="Developer ID Application: Your Name (TEAMID)" ./scripts/build-app.sh
-#   (list identities: security find-identity -v -p codesigning)
+# Signing: ad-hoc by default; set SIGN_ID to a "Developer ID Application: …"
+# identity (or its SHA-1) for a hardened-runtime, timestamped, notarizable build.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 APP="TransSped.app"
 ARCH="${GOARCH:-arm64}"
 SIGN_ID="${SIGN_ID:-}"
+TARGET="arm64-apple-macos13"
 
-# sign <path> — Developer ID (hardened runtime + timestamp) when SIGN_ID is set,
-# otherwise an ad-hoc signature.
 sign() {
   if [ -n "$SIGN_ID" ]; then
     codesign --force --options runtime --timestamp -s "$SIGN_ID" "$1"
@@ -33,8 +27,15 @@ CGO_ENABLED=1 GOARCH="$ARCH" go build -buildmode=c-shared -o libtscloud-pkcs11.d
 echo "==> assembling $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-GOARCH="$ARCH" go build -o "$APP/Contents/MacOS/tscloud-app" ./cmd/tscloud-app/
+
+echo "==> building Go engine (tscloud-engine)"
+GOARCH="$ARCH" go build -o "$APP/Contents/Resources/tscloud-engine" ./cmd/tscloud-engine/
 cp libtscloud-pkcs11.dylib "$APP/Contents/Resources/"
+
+echo "==> compiling SwiftUI app (TransSped)"
+swiftc -O -parse-as-library -target "$TARGET" \
+  -framework SwiftUI -framework AppKit \
+  -o "$APP/Contents/MacOS/TransSped" app/*.swift
 
 echo "==> rendering app icon (AppIcon.icns)"
 ICONSET="$(mktemp -d)/AppIcon.iconset"
@@ -56,21 +57,21 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleName</key><string>TransSped</string>
   <key>CFBundleDisplayName</key><string>TransSped</string>
   <key>CFBundleIdentifier</key><string>ro.transsped.macos</string>
-  <key>CFBundleVersion</key><string>0.0.1</string>
-  <key>CFBundleShortVersionString</key><string>0.0.1</string>
-  <key>CFBundleExecutable</key><string>tscloud-app</string>
+  <key>CFBundleVersion</key><string>0.0.2</string>
+  <key>CFBundleShortVersionString</key><string>0.0.2</string>
+  <key>CFBundleExecutable</key><string>TransSped</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>LSMinimumSystemVersion</key><string>11.0</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
 
 echo "==> codesigning ($([ -n "$SIGN_ID" ] && echo "$SIGN_ID" || echo "ad-hoc"))"
-# Sign inner-out: nested code first, then the bundle.
 sign "$APP/Contents/Resources/libtscloud-pkcs11.dylib"
-sign "$APP/Contents/MacOS/tscloud-app"
+sign "$APP/Contents/Resources/tscloud-engine"
+sign "$APP/Contents/MacOS/TransSped"
 sign "$APP"
 xattr -dr com.apple.quarantine "$APP" 2>/dev/null || true
 
