@@ -20,6 +20,8 @@ struct AboutView: View {
                 Label("github.com/guness/transsped-mac", systemImage: "arrow.up.forward")
             }
             .font(.callout)
+            Text("© 2026 Sinan Gunes · MIT")
+                .font(.caption).foregroundStyle(.secondary)
             Button(t(.close, L)) { dismiss() }.keyboardShortcut(.defaultAction).controlSize(.large)
         }
         .padding(24)
