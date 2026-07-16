@@ -21,7 +21,7 @@ Windows "EasySign" app uses. Your PIN and OTP are entered interactively (getpass
 are NEVER written to disk or printed, and are sent only to the Trans Sped endpoint.
 This script does NOT log you into ANAF; it validates the cryptographic building block.
 
-Run:  python3 ts_probe.py
+Run:  python3 scripts/ts_probe.py
 """
 
 import os
@@ -38,7 +38,7 @@ import urllib.error
 # Mobile eIDAS certs (Trans Sped Mobile eIDAS)  -> cloudsignature.online v1 (OAuth2)
 MSIGN_V0 = "https://msign.transsped.ro/csc/v0/local/"
 CSC_V1   = "https://services.cloudsignature.online/csc/v1/"
-BASE_URL = MSIGN_V0  # default; override with:  BASE=... python3 ts_probe.py
+BASE_URL = MSIGN_V0  # default; override with:  BASE=... python3 scripts/ts_probe.py
 if os.environ.get("BASE"):
     BASE_URL = os.environ["BASE"].rstrip("/") + "/"
 
@@ -133,7 +133,7 @@ def main():
     if not cred_ids:
         print("\nNo credentials found for that userID on this backend.")
         print("If your cert is a *mobile eIDAS* cert, re-run with:")
-        print("    BASE=%s python3 ts_probe.py" % CSC_V1)
+        print("    BASE=%s python3 scripts/ts_probe.py" % CSC_V1)
         return
     if len(cred_ids) == 1:
         cid = cred_ids[0]
