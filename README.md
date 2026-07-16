@@ -172,7 +172,7 @@ None of the above touch your real Trans Sped account or `~/.config/tscloud`.
   **"Remember PIN"**, it is stored in the macOS login **Keychain** (encrypted
   at rest, keyed to your credential ID under service `ro.transsped.macos`) via
   the `security` tool — never in a plaintext file. If you don't, it is
-  discarded after the login. Uninstalling (`-uninstall`) removes it. *(Caveat:
+  discarded after the login. Uninstalling (via the app's **Uninstall** button) removes it. *(Caveat:
   the Keychain item is saved with `-A` so the module can read it without a
   per-process prompt, and the PIN is briefly visible in `security`'s process
   arguments while being saved — acceptable on a single-user Mac.)*

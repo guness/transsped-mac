@@ -21,6 +21,7 @@ const moduleName = "TransSpedCloud"
 const defaultBase = "https://msign.transsped.ro/csc/v0/local/"
 
 // Status is the machine-readable state the UI renders.
+// NOTE: no `omitempty` on any field — the Swift EngineStatus decode has non-optional fields and requires every key present in the JSON.
 type Status struct {
 	Installed        bool   `json:"installed"`
 	Account          string `json:"account"`
@@ -337,7 +338,13 @@ func Uninstall() ([]string, error) {
 	}
 	var notes []string
 	if prof, err := defaultFirefoxProfile(); err == nil {
-		if removed, err := unregisterModule(prof); err == nil && removed {
+		removed, uerr := unregisterModule(prof)
+		if uerr != nil {
+			// Don't proceed to delete the dylib while Firefox still references
+			// it — that would leave a dangling module and a false "complete".
+			return notes, coded("unknown", "unregistering module: %v", uerr)
+		}
+		if removed {
 			notes = append(notes, "Removed the module from Firefox.")
 		}
 	}

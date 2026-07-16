@@ -52,6 +52,7 @@ enum Engine {
             // deadlock you'd get by reading only from terminationHandler).
             DispatchQueue.global().async {
                 let data = out.fileHandleForReading.readDataToEndOfFile()
+                // stderr drained after stdout — safe because the engine writes only JSON to stdout and nothing to stderr; drain concurrently if that ever changes.
                 _ = err.fileHandleForReading.readDataToEndOfFile()
                 cont.resume(returning: data)
             }
