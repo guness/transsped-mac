@@ -139,3 +139,17 @@ itself (Homebrew/OpenSC build), not a bug in `libtscloud-pkcs11.dylib` —
 `dlopen()` from a hardened process refuses relative paths. Passing an
 absolute path (`"$(pwd)/libtscloud-pkcs11.dylib"`) resolved it. The
 procedure above already uses the absolute form.
+
+## App window smoke test (manual)
+
+After `./scripts/build-app.sh`:
+
+1. `open "TransSped.app"` → a window appears.
+2. With no `~/.config/tscloud`, it shows the **Set up** card (userID field).
+   With a config present, it shows status rows (Installed in Firefox, Account,
+   Certificate valid until …) and the Update / Open ANAF / Uninstall / About
+   buttons.
+3. Click **About** → the sheet shows name, version, description, and the GitHub
+   link. Click **Close**.
+4. `TransSped.app/Contents/Resources/tscloud-engine status` prints a JSON
+   object; `installed` reflects whether a config exists.

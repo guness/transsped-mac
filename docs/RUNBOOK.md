@@ -13,15 +13,15 @@ needs your real Trans Sped account and a live OTP.
 
 1. **Quit Firefox** — a security module can't be added while it's running.
 2. Open **`TransSped.app`** (double-click, or `open "TransSped.app"`).
-3. Enter your **Trans Sped userID** (the email or phone registered for your
-   cloud certificate) when the dialog asks.
-4. Expect **"Setup complete."** Behind the scenes the app fetched your
-   certificate to `~/.config/tscloud/`, copied the module there, and appended
-   a `TransSpedCloud` entry to your default profile's `pkcs11.txt`.
+3. In the window's **Set up** card, enter your **Trans Sped userID** (email or
+   phone) and click **Set up**.
+4. The window switches to the status view: **Installed in Firefox**, your
+   account, and the certificate expiry. Behind the scenes the app fetched your
+   certificate to `~/.config/tscloud/`, copied the module there, and registered
+   it into your default profile's `pkcs11.txt`.
 
-(Building the app from a checkout: `./scripts/build-app.sh`. The standalone
-credential-fetch CLI still exists — `./scripts/build.sh` then
-`./tscloud-setup -user "<email or phone>"` — but the app does all of this.)
+(The engine is also runnable headlessly for scripting/CI:
+`TransSped.app/Contents/Resources/tscloud-engine status|setup --user <id>|uninstall`.)
 
 ## Step 2 — Log in
 
@@ -65,18 +65,14 @@ entering the OTP, note the approximate delay before it gave up.
 | Module not listed in Firefox at all | Confirm `pkcs11.txt` in your default profile contains a `name=TransSpedCloud` line. Re-run the app (with Firefox quit) to re-register. To find your default profile: it's the `[Install…] Default` (or `Default=1`) entry in `~/Library/Application Support/Firefox/profiles.ini`. |
 | `TransSped.app` reports "no cloud credential found" | Your certificate may be a **mobile-eIDAS** credential rather than a standard qualified cert — those live on a different backend (`https://services.cloudsignature.online/csc/v1/` with OAuth2), which this tool does not support (it targets `https://msign.transsped.ro/csc/v0/local/` only). Confirm with whoever issued your Trans Sped credential which backend it's on. |
 | PIN rejected / OTP rejected | Confirm you're entering your **Trans Sped signature PIN/password** (not your ANAF portal password), and that the OTP is the current one from the Trans Sped app or SMS (they expire quickly — start a fresh login attempt if it lapses). A *remembered* PIN that fails is forgotten automatically, so the next login will prompt for it again. |
-| Remembered PIN keeps re-appearing / want to clear it | Run `open "TransSped.app" --args -uninstall` (clears it), or remove it directly: `security delete-generic-password -s ro.transsped.macos`. |
+| Remembered PIN keeps re-appearing / want to clear it | Open **TransSped.app** and click **Uninstall** (clears it), or remove it directly: `security delete-generic-password -s ro.transsped.macos`. |
 
 ## Uninstall / reset
 
-```bash
-open "TransSped.app" --args -uninstall
-```
-
-Unregisters `TransSpedCloud` from your Firefox profile and deletes
-`~/.config/tscloud`. (Or unload it manually: Firefox → Settings → Privacy &
-Security → **Security Devices** → **Unload**.) To reinstall, just run the app
-again.
+Open **TransSped.app** and click **Uninstall** (with Firefox quit). It unregisters
+`TransSpedCloud` from your Firefox profile and deletes `~/.config/tscloud`.
+(Or unload it manually: Firefox → Settings → Privacy & Security → **Security
+Devices** → **Unload**.) To reinstall, just run the app again.
 
 ---
 
