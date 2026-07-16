@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,6 +29,15 @@ func stubFirefox(t *testing.T, running bool) {
 	orig := firefoxRunning
 	firefoxRunning = func() bool { return running }
 	t.Cleanup(func() { firefoxRunning = orig })
+}
+
+// stubKeychain replaces the Keychain delete so tests never touch the real login
+// Keychain.
+func stubKeychain(t *testing.T) {
+	t.Helper()
+	orig := deleteKeychainPIN
+	deleteKeychainPIN = func() bool { return false }
+	t.Cleanup(func() { deleteKeychainPIN = orig })
 }
 
 func TestRegisterUnregisterRoundTrip(t *testing.T) {
@@ -70,5 +80,66 @@ func TestGetStatus_NoConfig(t *testing.T) {
 	}
 	if s.ModuleRegistered {
 		t.Fatal("ModuleRegistered must be false with no profile")
+	}
+}
+
+func TestRun_EmptyUser(t *testing.T) {
+	t.Setenv("TSCLOUD_DIR", t.TempDir())
+	_, err := Run("   ")
+	var ce *CodedError
+	if !errors.As(err, &ce) || ce.Code != "no_credential" {
+		t.Fatalf("want no_credential CodedError, got %v", err)
+	}
+}
+
+func TestRun_FirefoxRunningIsPreflight(t *testing.T) {
+	cfgDir := t.TempDir()
+	t.Setenv("TSCLOUD_DIR", cfgDir)
+	t.Setenv("TSCLOUD_FIREFOX_DIR", t.TempDir())
+	stubFirefox(t, true) // Firefox "open"
+	_, err := Run("+123")
+	var ce *CodedError
+	if !errors.As(err, &ce) || ce.Code != "firefox_running" {
+		t.Fatalf("want firefox_running, got %v", err)
+	}
+	// No mutation must have happened (no dylib copied into the config dir).
+	if _, e := os.Stat(filepath.Join(cfgDir, "libtscloud-pkcs11.dylib")); !os.IsNotExist(e) {
+		t.Fatal("Run mutated state before the firefox_running pre-flight check")
+	}
+}
+
+func TestUninstall_ClearsConfig(t *testing.T) {
+	cfgDir := t.TempDir()
+	ffDir := t.TempDir()
+	t.Setenv("TSCLOUD_DIR", cfgDir)
+	t.Setenv("TSCLOUD_FIREFOX_DIR", ffDir)
+	stubFirefox(t, false)
+	stubKeychain(t)
+
+	// seed a config file and a Firefox profile with our module registered
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	prof := filepath.Join(ffDir, "Profiles", "test.default")
+	if err := os.MkdirAll(prof, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ffDir, "profiles.ini"),
+		[]byte("[Profile0]\nPath=Profiles/test.default\nIsRelative=1\nDefault=1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(prof, "pkcs11.txt"),
+		[]byte("library=\nname=NSS Internal PKCS #11 Module\n\nlibrary=/x/libtscloud-pkcs11.dylib\nname=TransSpedCloud\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Uninstall(); err != nil {
+		t.Fatalf("Uninstall: %v", err)
+	}
+	if _, err := os.Stat(cfgDir); !os.IsNotExist(err) {
+		t.Fatalf("config dir should be gone, stat err=%v", err)
+	}
+	if moduleRegistered(prof) {
+		t.Fatal("module should be unregistered from the profile")
 	}
 }

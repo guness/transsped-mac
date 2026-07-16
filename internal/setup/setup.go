@@ -284,3 +284,72 @@ func fetchCert(base, userID string) error {
 	}
 	return config.Save(&config.Config{BaseURL: base, UserID: userID, CredentialID: ids[0], Label: "Trans Sped Cloud"}, leaf, inter)
 }
+
+// deleteKeychainPIN removes the remembered PIN; a package var so tests never
+// touch the real login Keychain.
+var deleteKeychainPIN = func() bool {
+	return exec.Command("security", "delete-generic-password", "-s", config.KeychainService).Run() == nil
+}
+
+// Run performs a full setup (or update): copy the module to the config dir,
+// fetch the cert, and register the module into the default Firefox profile.
+// The Firefox and profile pre-conditions are checked BEFORE any mutation, so a
+// blocked setup leaves nothing half-written.
+func Run(userID string) (*Status, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, coded("no_credential", "no userID provided")
+	}
+	if firefoxRunning() {
+		return nil, coded("firefox_running", "please quit Firefox first")
+	}
+	prof, err := defaultFirefoxProfile()
+	if err != nil {
+		return nil, coded("no_profile", "%v", err)
+	}
+	// Mutations begin here.
+	dylibSrc, err := findDylib()
+	if err != nil {
+		return nil, coded("unknown", "%v", err)
+	}
+	stable := filepath.Join(config.Dir(), "libtscloud-pkcs11.dylib")
+	if err := copyFile(dylibSrc, stable, 0o755); err != nil {
+		return nil, coded("unknown", "copying module: %v", err)
+	}
+	base := defaultBase
+	if cfg, _, _, e := config.Load(); e == nil && cfg.BaseURL != "" {
+		base = cfg.BaseURL
+	}
+	if err := fetchCert(base, userID); err != nil {
+		return nil, err // already a CodedError
+	}
+	if _, err := registerModule(prof, stable); err != nil {
+		return nil, coded("unknown", "registering module: %v", err)
+	}
+	return GetStatus(), nil
+}
+
+// Uninstall removes the module from Firefox, clears the remembered PIN, and
+// deletes ~/.config/tscloud. Firefox must be closed.
+func Uninstall() ([]string, error) {
+	if firefoxRunning() {
+		return nil, coded("firefox_running", "please quit Firefox first")
+	}
+	var notes []string
+	if prof, err := defaultFirefoxProfile(); err == nil {
+		if removed, err := unregisterModule(prof); err == nil && removed {
+			notes = append(notes, "Removed the module from Firefox.")
+		}
+	}
+	if deleteKeychainPIN() {
+		notes = append(notes, "Removed the remembered PIN from the Keychain.")
+	}
+	dir := config.Dir()
+	if _, err := os.Stat(dir); err == nil {
+		if err := os.RemoveAll(dir); err != nil {
+			return notes, coded("unknown", "deleting %s: %v", dir, err)
+		}
+		notes = append(notes, "Deleted "+dir+".")
+	}
+	return notes, nil
+}
