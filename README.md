@@ -36,17 +36,16 @@ APM** that requests the client cert via TLS **renegotiation** and offers
 
 ## Install (the app)
 
-The simplest path is the packaged setup app — it touches **only** your normal
-Firefox, additively, and needs no scripts, no separate profile, and no changes
-to your existing certificates.
-
 1. **Quit Firefox** (a security module can't be added while it's running).
-2. Open **`TransSped.app`** (double-click, or `open "TransSped.app"`).
-3. Enter your **Trans Sped userID** (the email or phone registered for your
-   cloud certificate) when prompted. The app fetches your certificate, copies
-   the module to `~/.config/tscloud/`, and registers it into your default
-   Firefox profile's `pkcs11.txt`.
-4. It reports **"Setup complete."**
+2. Open **`TransSped.app`** (double-click, or `open "TransSped.app"`). A small
+   window appears.
+3. First run shows **Set up TransSped** — enter your **Trans Sped userID** (the
+   email or phone registered for your cloud certificate) and click **Set up**.
+   The app fetches your certificate and registers the PKCS#11 module into your
+   normal Firefox profile.
+4. The window then shows your status: **Installed in Firefox**, your account,
+   and the certificate's expiry. From here you can **Update** (re-fetch),
+   **Open ANAF login**, **Uninstall**, or view **About**.
 
 Then use Firefox as usual (see [Daily use](#daily-use)).
 
@@ -54,15 +53,10 @@ To build the app from a checkout: `./scripts/build-app.sh` → `TransSped.app`.
 
 ### Uninstall
 
-```bash
-open "TransSped.app" --args -uninstall     # GUI confirm, then removes everything
-# or from a terminal:
-./TransSped.app/Contents/MacOS/tscloud-app -uninstall -cli
-```
-
-This unregisters the `TransSpedCloud` module from your Firefox profile and
-deletes `~/.config/tscloud`. (You can also unload it manually from Firefox →
-Settings → Privacy & Security → **Security Devices** → **Unload**.)
+Open **TransSped**, then click **Uninstall** (with Firefox quit). It unregisters
+the `TransSpedCloud` module from Firefox and deletes `~/.config/tscloud`
+(including any remembered PIN). You can also unload it manually from Firefox →
+Settings → Privacy & Security → **Security Devices** → **Unload**.
 
 ## Daily use
 
