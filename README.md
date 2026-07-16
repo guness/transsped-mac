@@ -203,3 +203,9 @@ None of the above touch your real Trans Sped account or `~/.config/tscloud`.
 - [docs/specs/2026-07-14-anaf-macos-login-design.md](docs/specs/2026-07-14-anaf-macos-login-design.md)
   — the full design spec (architecture, CSC endpoint contracts, algorithm
   selection, risks).
+
+## License
+
+**MIT** © 2026 Sinan Gunes — see [LICENSE](LICENSE). You're free to use, modify,
+and distribute this (including commercially); the only condition is that you
+keep the copyright/attribution notice.
