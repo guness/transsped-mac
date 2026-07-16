@@ -22,8 +22,9 @@ type Prompter interface {
 // OSAScript shows native macOS dialogs and returns the typed values.
 type OSAScript struct{}
 
-func (OSAScript) OTP(prompt string) (string, error) {
-	return dialog("ANAF login — Trans Sped OTP", prompt)
+func (OSAScript) OTP(string) (string, error) {
+	c := dialogCopy(detectLang())
+	return dialog(c.otpTitle, c.otpMessage, c.ok, c.cancel)
 }
 
 // Collect shows a single dialog with a PIN field, an OTP field, and a
@@ -31,11 +32,10 @@ func (OSAScript) OTP(prompt string) (string, error) {
 // AppleScriptObjC — `display dialog` supports only one input field). If that
 // dialog can't be shown for any reason, it falls back to two sequential
 // `display dialog` prompts so login still works.
-func (o OSAScript) Collect(pinPrompt, otpPrompt string) (pin, otp string, remember bool, err error) {
+func (o OSAScript) Collect(_, _ string) (pin, otp string, remember bool, err error) {
+	c := dialogCopy(detectLang())
 	out, e := exec.Command("osascript", "-e", combinedDialog,
-		"ANAF login — Trans Sped",
-		"Enter your signature PIN and the one-time code to authorise the ANAF login.",
-		pinPrompt, otpPrompt).Output()
+		c.title, c.info, c.pinField, c.otpField, c.remember, c.ok, c.cancel).Output()
 	if e == nil {
 		s := strings.TrimRight(string(out), "\n")
 		if s == "CANCELLED" {
@@ -46,36 +46,39 @@ func (o OSAScript) Collect(pinPrompt, otpPrompt string) (pin, otp string, rememb
 		}
 	}
 	// Fallback: sequential dialogs (PIN with a "Remember" button, then OTP).
-	return o.collectSequential(pinPrompt, otpPrompt)
+	return o.collectSequential(c)
 }
 
-func (o OSAScript) collectSequential(pinPrompt, otpPrompt string) (string, string, bool, error) {
-	pin, remember, err := o.pinWithRemember(pinPrompt)
+func (o OSAScript) collectSequential(c dialogStrings) (string, string, bool, error) {
+	pin, remember, err := o.pinWithRemember(c)
 	if err != nil {
 		return "", "", false, err
 	}
-	otp, err := o.OTP(otpPrompt)
+	otp, err := dialog(c.otpTitle, c.otpMessage, c.ok, c.cancel)
 	if err != nil {
 		return "", "", false, err
 	}
 	return pin, otp, remember, nil
 }
 
-func (OSAScript) pinWithRemember(prompt string) (string, bool, error) {
-	script := `set r to display dialog "` + escape(prompt) + `" default answer "" with title "ANAF login — Trans Sped PIN" with hidden answer buttons {"Cancel","Remember & OK","OK"} default button "OK"`
+func (OSAScript) pinWithRemember(c dialogStrings) (string, bool, error) {
+	script := `set r to display dialog "` + escape(c.pinMessage) + `" default answer "" with title "` +
+		escape(c.pinTitle) + `" with hidden answer buttons {"` + escape(c.cancel) + `","` +
+		escape(c.rememberOK) + `","` + escape(c.ok) + `"} default button "` + escape(c.ok) + `"`
 	out, err := exec.Command("osascript", "-e", script,
 		"-e", `(text returned of r) & linefeed & (button returned of r)`).Output()
 	if err != nil {
 		return "", false, err
 	}
 	parts := strings.SplitN(strings.TrimRight(string(out), "\n"), "\n", 2)
-	remember := len(parts) > 1 && strings.TrimSpace(parts[1]) == "Remember & OK"
+	remember := len(parts) > 1 && strings.TrimSpace(parts[1]) == c.rememberOK
 	return parts[0], remember, nil
 }
 
-func dialog(title, prompt string) (string, error) {
+func dialog(title, prompt, okBtn, cancelBtn string) (string, error) {
 	script := `display dialog "` + escape(prompt) + `" default answer "" with title "` +
-		escape(title) + `" buttons {"Cancel","OK"} default button "OK"`
+		escape(title) + `" buttons {"` + escape(cancelBtn) + `","` + escape(okBtn) +
+		`"} default button "` + escape(okBtn) + `"`
 	out, err := exec.Command("osascript", "-e", script, "-e", `text returned of result`).Output()
 	if err != nil {
 		return "", err
@@ -90,8 +93,9 @@ func escape(s string) string {
 
 // combinedDialog is an AppleScriptObjC program (run via osascript) that shows an
 // NSAlert with a two-field + checkbox accessory view. Its `on run argv` handler
-// takes: title, informative text, PIN placeholder, OTP placeholder. It prints
-// "pin\notp\n{0|1}" on OK, or "CANCELLED" otherwise.
+// takes: title, informative text, PIN placeholder, OTP placeholder, remember
+// label, OK label, Cancel label. It prints "pin\notp\n{0|1}" on OK (the first
+// button), or "CANCELLED" otherwise.
 const combinedDialog = `use framework "Foundation"
 use framework "AppKit"
 use scripting additions
@@ -103,8 +107,8 @@ on run argv
 	set alertObj to a's NSAlert's alloc()'s init()
 	alertObj's setMessageText:(item 1 of argv)
 	alertObj's setInformativeText:(item 2 of argv)
-	alertObj's addButtonWithTitle:"OK"
-	alertObj's addButtonWithTitle:"Cancel"
+	alertObj's addButtonWithTitle:(item 6 of argv)
+	alertObj's addButtonWithTitle:(item 7 of argv)
 	set v to a's NSView's alloc()'s initWithFrame:(a's NSMakeRect(0, 0, 320, 95))
 	set pinF to a's NSSecureTextField's alloc()'s initWithFrame:(a's NSMakeRect(0, 63, 320, 24))
 	pinF's setPlaceholderString:(item 3 of argv)
@@ -112,7 +116,7 @@ on run argv
 	otpF's setPlaceholderString:(item 4 of argv)
 	set remB to a's NSButton's alloc()'s initWithFrame:(a's NSMakeRect(0, 4, 320, 22))
 	remB's setButtonType:(a's NSButtonTypeSwitch)
-	remB's setTitle:"Remember PIN on this Mac"
+	remB's setTitle:(item 5 of argv)
 	v's addSubview:pinF
 	v's addSubview:otpF
 	v's addSubview:remB

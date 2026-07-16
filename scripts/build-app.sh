@@ -57,8 +57,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleName</key><string>TransSped</string>
   <key>CFBundleDisplayName</key><string>TransSped</string>
   <key>CFBundleIdentifier</key><string>ro.transsped.macos</string>
-  <key>CFBundleVersion</key><string>0.0.2</string>
-  <key>CFBundleShortVersionString</key><string>0.0.2</string>
+  <key>CFBundleVersion</key><string>0.0.3</string>
+  <key>CFBundleShortVersionString</key><string>0.0.3</string>
   <key>CFBundleExecutable</key><string>TransSped</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>

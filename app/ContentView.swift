@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @AppStorage("appLanguage") private var langRaw = AppLang.system.rawValue
     @State private var status: EngineStatus?
     @State private var loading = true
     @State private var busy = false
@@ -8,6 +9,9 @@ struct ContentView: View {
     @State private var isError = false
     @State private var userID = ""
     @State private var showAbout = false
+
+    // Resolved language for this render; changing langRaw re-renders (live switch).
+    private var L: Lang { resolve(langRaw) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -48,12 +52,21 @@ struct ContentView: View {
                 Text("v\(appVersion())").font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
+            Menu {
+                Picker(t(.language, L), selection: $langRaw) {
+                    Text(t(.langSystem, L)).tag(AppLang.system.rawValue)
+                    Text("English").tag(AppLang.en.rawValue)
+                    Text("Română").tag(AppLang.ro.rawValue)
+                }
+            } label: {
+                Image(systemName: "globe").font(.system(size: 15))
+            }
+            .menuStyle(.borderlessButton).fixedSize()
+            .foregroundStyle(.secondary).help(t(.language, L))
             Button { showAbout = true } label: {
                 Image(systemName: "info.circle").font(.system(size: 16))
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help("About TransSped")
+            .buttonStyle(.plain).foregroundStyle(.secondary).help(t(.aboutTip, L))
         }
     }
 
@@ -64,10 +77,10 @@ struct ContentView: View {
             VStack(spacing: 10) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.largeTitle).foregroundStyle(.orange)
-                Text("Couldn't run the setup engine.").font(.headline)
-                Text("The app may be damaged — reinstall TransSped from the DMG.")
+                Text(t(.engineErrTitle, L)).font(.headline)
+                Text(t(.engineErrBody, L))
                     .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                Button("Retry") { Task { await refresh() } }.buttonStyle(.bordered)
+                Button(t(.retry, L)) { Task { await refresh() } }.buttonStyle(.bordered)
             }
             .frame(maxWidth: .infinity)
         }
@@ -77,18 +90,18 @@ struct ContentView: View {
         VStack(spacing: 14) {
             Card {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Set up TransSped").font(.headline)
-                    Text("Enter the email or phone registered with Trans Sped for your cloud certificate.")
+                    Text(t(.setUpTitle, L)).font(.headline)
+                    Text(t(.setUpBlurb, L))
                         .font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    TextField("email or phone", text: $userID)
+                    TextField(t(.emailOrPhone, L), text: $userID)
                         .textFieldStyle(.roundedBorder)
                         .controlSize(.large)
                         .onSubmit { Task { await doSetup(user: userID) } }
                 }
             }
             Button { Task { await doSetup(user: userID) } } label: {
-                Label("Set up", systemImage: "checkmark.seal").frame(maxWidth: .infinity)
+                Label(t(.setUp, L), systemImage: "checkmark.seal").frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent).controlSize(.large).tint(Theme.brand)
             .disabled(busy || userID.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -103,29 +116,27 @@ struct ContentView: View {
                     HStack(spacing: 10) {
                         Image(systemName: s.moduleRegistered ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
                             .foregroundStyle(s.moduleRegistered ? Color.green : Color.orange)
-                        Text(s.moduleRegistered ? "Installed in Firefox" : "Not registered in Firefox")
+                        Text(s.moduleRegistered ? t(.installed, L) : t(.notInstalled, L))
                             .fontWeight(.semibold)
                         Spacer()
                     }
                     Divider()
-                    InfoRow(icon: "person.crop.circle", label: "Account", value: s.account)
+                    InfoRow(icon: "person.crop.circle", label: t(.account, L), value: s.account)
                     if !s.certNotAfter.isEmpty {
                         certRow(s.certNotAfter)
                     }
                 }
             }
             if s.firefoxRunning {
-                Callout(icon: "exclamationmark.triangle.fill",
-                        text: "Firefox is open — quit it before Update or Uninstall.",
-                        tint: .orange)
+                Callout(icon: "exclamationmark.triangle.fill", text: t(.firefoxOpen, L), tint: .orange)
             }
             VStack(spacing: 8) {
                 Button { openANAF() } label: {
-                    Label("Open ANAF login", systemImage: "arrow.up.forward.app").frame(maxWidth: .infinity)
+                    Label(t(.openAnaf, L), systemImage: "arrow.up.forward.app").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent).controlSize(.large).tint(Theme.brand)
                 Button { Task { await doSetup(user: s.account) } } label: {
-                    Label("Update certificate", systemImage: "arrow.clockwise").frame(maxWidth: .infinity)
+                    Label(t(.updateCert, L), systemImage: "arrow.clockwise").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered).controlSize(.large).disabled(busy)
             }
@@ -133,7 +144,7 @@ struct ContentView: View {
                 if busy { ProgressView().controlSize(.small) }
                 Spacer()
                 Button(role: .destructive) { Task { await doUninstall() } } label: {
-                    Text("Uninstall").font(.callout)
+                    Text(t(.uninstall, L)).font(.callout)
                 }
                 .buttonStyle(.plain).foregroundStyle(.red).disabled(busy)
             }
@@ -144,7 +155,7 @@ struct ContentView: View {
     private func certRow(_ iso: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "checkmark.shield").foregroundStyle(.secondary).frame(width: 16)
-            Text("Valid until").foregroundStyle(.secondary)
+            Text(t(.validUntil, L)).foregroundStyle(.secondary)
             Spacer(minLength: 12)
             Text(formatDate(iso)).fontWeight(.medium).monospacedDigit()
                 .foregroundStyle(expiryColor(iso))
@@ -165,7 +176,7 @@ struct ContentView: View {
         let r = await Engine.setup(user: user.trimmingCharacters(in: .whitespaces))
         if r.ok {
             if let s = r.status { status = s } else { status = await Engine.status() }
-            message = r.message; isError = false
+            message = t(.setupDone, L); isError = false
         } else {
             message = friendly(r); isError = true
         }
@@ -177,8 +188,7 @@ struct ContentView: View {
         let r = await Engine.uninstall()
         if r.ok {
             status = await Engine.status()
-            message = ((r.notes ?? []) + [r.message ?? "Uninstalled."]).joined(separator: "\n")
-            isError = false
+            message = t(.uninstalled, L); isError = false
         } else {
             message = friendly(r); isError = true
         }
@@ -194,11 +204,11 @@ struct ContentView: View {
 
     private func friendly(_ r: EngineResult) -> String {
         switch r.code {
-        case "firefox_running": return "Please quit Firefox first, then try again."
-        case "no_credential":  return "No certificate was found for this userID. Check it — or you may still need to enroll with Trans Sped (ANAF form 150)."
-        case "no_profile":     return "No Firefox profile found. Launch Firefox once, then quit it and try again."
-        case "network":        return "Couldn't reach the Trans Sped service. Check your connection and try again."
-        default:               return r.error ?? "Something went wrong."
+        case "firefox_running": return t(.errFirefox, L)
+        case "no_credential":  return t(.errNoCred, L)
+        case "no_profile":     return t(.errNoProfile, L)
+        case "network":        return t(.errNetwork, L)
+        default:               return r.error ?? t(.somethingWrong, L)
         }
     }
 
@@ -206,7 +216,9 @@ struct ContentView: View {
 
     private func formatDate(_ iso: String) -> String {
         guard let d = parseDate(iso) else { return iso }
-        let f = DateFormatter(); f.dateStyle = .medium; f.timeStyle = .none
+        let f = DateFormatter()
+        f.locale = Locale(identifier: localeID(L))
+        f.dateStyle = .medium; f.timeStyle = .none
         return f.string(from: d)
     }
 
